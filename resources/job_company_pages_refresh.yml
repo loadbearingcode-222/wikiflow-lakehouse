@@ -1,0 +1,31 @@
+resources:
+  jobs:
+    company_pages_refresh:
+      name: wikiflow_company_pages_refresh_${bundle.target}
+      description: >-
+        Daily - resolve tracked companies (seeds/companies.csv) into Wikidata articles and their
+        redirects, and publish the filter; refused if it shrank by more than 10%.
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      schedule:
+        quartz_cron_expression: "0 30 2 * * ?"
+        timezone_id: UTC
+      tasks:
+        - task_key: resolve_and_publish
+          environment_key: default
+          max_retries: 2
+          min_retry_interval_millis: 900000
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: company_pages_refresh
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--seed"
+              - "${workspace.file_path}/seeds/companies.csv"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl

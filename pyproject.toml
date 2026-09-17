@@ -26,6 +26,7 @@ connect = [
 hello = "wikiflow.tasks.hello:main"
 feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
 land_hour = "wikiflow.tasks.land_hour:main"
+company_pages_refresh = "wikiflow.tasks.company_pages_refresh:main"
 
 [build-system]
 requires = ["hatchling"]
