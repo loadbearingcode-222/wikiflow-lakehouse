@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "The wikiflow hourly Wikimedia pageviews pipeline, rebuilt on Databricks"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "pydantic>=2.9",
+]
 
 [dependency-groups]
 dev = [
@@ -12,6 +14,10 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
+]
+# Integration tests run Spark on serverless from the laptop (ADR 0010: 19.1 measured working).
+connect = [
+    "databricks-connect>=19.1,<19.2",
 ]
 
 [project.scripts]
@@ -58,7 +64,7 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 # Spark is provided by the serverless runtime, not installed locally.
-module = ["pyspark.*"]
+module = ["pyspark.*", "databricks.connect.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest
@@ -66,3 +72,7 @@ ignore_missing_imports = true
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "unit: pure Python, no network, no Spark",
+    "integration: Databricks Connect against the sandbox catalog (uv run --group connect pytest tests/integration)",
+]
