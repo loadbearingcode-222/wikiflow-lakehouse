@@ -134,6 +134,134 @@
         "  )\n",
         " WHERE newest = 1"
       ]
+    },
+    {
+      "name": "cost_by_workload",
+      "displayName": "DBUs per day per workload of this target",
+      "queryLines": [
+        "WITH target AS (\n",
+        "  -- The dashboard runs in its target's catalog (dataset_catalog), so the catalog names the target\n",
+        "  -- whose workloads to cost. system tables themselves are account-wide.\n",
+        "  SELECT CASE current_catalog() WHEN 'wikiflow_sbx' THEN 'sandbox' WHEN 'wikiflow_dev' THEN 'dev' ELSE 'prod' END AS name\n",
+        "),\n",
+        "pipelines AS (\n",
+        "  SELECT pipeline_id, name FROM system.lakeflow.pipelines\n",
+        "  QUALIFY row_number() OVER (PARTITION BY pipeline_id ORDER BY change_time DESC) = 1\n",
+        "),\n",
+        "usage AS (\n",
+        "  SELECT u.usage_date,\n",
+        "         u.usage_end_time,\n",
+        "         coalesce(u.usage_metadata.job_name, p.name) AS workload,\n",
+        "         u.usage_quantity AS dbus\n",
+        "    FROM system.billing.usage AS u\n",
+        "    LEFT JOIN pipelines AS p ON p.pipeline_id = u.usage_metadata.dlt_pipeline_id\n",
+        "   CROSS JOIN target\n",
+        "   WHERE u.usage_unit = 'DBU'\n",
+        "     AND coalesce(u.usage_metadata.job_name, p.name) LIKE concat('wikiflow%', target.name)\n",
+        ")\n",
+        "SELECT usage_date, workload, round(sum(dbus), 3) AS dbus\n",
+        "  FROM usage\n",
+        " GROUP BY usage_date, workload"
+      ]
+    },
+    {
+      "name": "cost_per_hour",
+      "displayName": "DBUs per ingested hour, per day",
+      "queryLines": [
+        "WITH target AS (\n",
+        "  -- The dashboard runs in its target's catalog (dataset_catalog), so the catalog names the target\n",
+        "  -- whose workloads to cost. system tables themselves are account-wide.\n",
+        "  SELECT CASE current_catalog() WHEN 'wikiflow_sbx' THEN 'sandbox' WHEN 'wikiflow_dev' THEN 'dev' ELSE 'prod' END AS name\n",
+        "),\n",
+        "pipelines AS (\n",
+        "  SELECT pipeline_id, name FROM system.lakeflow.pipelines\n",
+        "  QUALIFY row_number() OVER (PARTITION BY pipeline_id ORDER BY change_time DESC) = 1\n",
+        "),\n",
+        "usage AS (\n",
+        "  SELECT u.usage_date,\n",
+        "         u.usage_end_time,\n",
+        "         coalesce(u.usage_metadata.job_name, p.name) AS workload,\n",
+        "         u.usage_quantity AS dbus\n",
+        "    FROM system.billing.usage AS u\n",
+        "    LEFT JOIN pipelines AS p ON p.pipeline_id = u.usage_metadata.dlt_pipeline_id\n",
+        "   CROSS JOIN target\n",
+        "   WHERE u.usage_unit = 'DBU'\n",
+        "     AND coalesce(u.usage_metadata.job_name, p.name) LIKE concat('wikiflow%', target.name)\n",
+        "),\n",
+        "per_day AS (\n",
+        "  SELECT usage_date,\n",
+        "         sum(CASE WHEN workload LIKE 'wikiflow_ingest_hours_%' THEN dbus END) AS ingest_dbus,\n",
+        "         sum(CASE WHEN workload LIKE 'wikiflow_pageviews_%' THEN dbus END)    AS pipeline_dbus\n",
+        "    FROM usage\n",
+        "   GROUP BY usage_date\n",
+        "),\n",
+        "hours AS (\n",
+        "  -- Successful ingests of an hour, re-ingests included: each one is work the ingest job paid for.\n",
+        "  -- Only those finished before billing's newest record: billing lags, and counting hours whose\n",
+        "  -- DBUs are not billed yet would understate the rate for the newest day.\n",
+        "  SELECT to_date(finished_at) AS usage_date, count(*) AS hours_ingested\n",
+        "    FROM ops.ingest_audit\n",
+        "   WHERE task_key = 'ingest_hour' AND status = 'success'\n",
+        "     AND finished_at <= (SELECT max(usage_end_time) FROM usage)\n",
+        "   GROUP BY to_date(finished_at)\n",
+        ")\n",
+        "SELECT h.usage_date,\n",
+        "       h.hours_ingested,\n",
+        "       round(coalesce(d.ingest_dbus, 0), 3)                          AS ingest_dbus,\n",
+        "       round(coalesce(d.pipeline_dbus, 0), 3)                        AS pipeline_dbus,\n",
+        "       round(coalesce(d.ingest_dbus, 0) / h.hours_ingested, 4)       AS ingest_dbus_per_hour,\n",
+        "       round(coalesce(d.pipeline_dbus, 0) / h.hours_ingested, 4)     AS pipeline_dbus_per_hour\n",
+        "  FROM hours AS h\n",
+        "  JOIN per_day AS d USING (usage_date)"
+      ]
+    },
+    {
+      "name": "cost_summary",
+      "displayName": "DBUs per ingested hour over every day billed, one row",
+      "queryLines": [
+        "WITH target AS (\n",
+        "  -- The dashboard runs in its target's catalog (dataset_catalog), so the catalog names the target\n",
+        "  -- whose workloads to cost. system tables themselves are account-wide.\n",
+        "  SELECT CASE current_catalog() WHEN 'wikiflow_sbx' THEN 'sandbox' WHEN 'wikiflow_dev' THEN 'dev' ELSE 'prod' END AS name\n",
+        "),\n",
+        "pipelines AS (\n",
+        "  SELECT pipeline_id, name FROM system.lakeflow.pipelines\n",
+        "  QUALIFY row_number() OVER (PARTITION BY pipeline_id ORDER BY change_time DESC) = 1\n",
+        "),\n",
+        "usage AS (\n",
+        "  SELECT u.usage_date,\n",
+        "         u.usage_end_time,\n",
+        "         coalesce(u.usage_metadata.job_name, p.name) AS workload,\n",
+        "         u.usage_quantity AS dbus\n",
+        "    FROM system.billing.usage AS u\n",
+        "    LEFT JOIN pipelines AS p ON p.pipeline_id = u.usage_metadata.dlt_pipeline_id\n",
+        "   CROSS JOIN target\n",
+        "   WHERE u.usage_unit = 'DBU'\n",
+        "     AND coalesce(u.usage_metadata.job_name, p.name) LIKE concat('wikiflow%', target.name)\n",
+        "),\n",
+        "hours AS (\n",
+        "  SELECT to_date(finished_at) AS usage_date, count(*) AS hours_ingested\n",
+        "    FROM ops.ingest_audit\n",
+        "   WHERE task_key = 'ingest_hour' AND status = 'success'\n",
+        "     AND finished_at <= (SELECT max(usage_end_time) FROM usage)\n",
+        "   GROUP BY to_date(finished_at)\n",
+        "),\n",
+        "billed AS (\n",
+        "  -- Only days both sides know: billing lags, and the audit may hold days billing has not reached.\n",
+        "  SELECT usage_date,\n",
+        "         sum(CASE WHEN workload LIKE 'wikiflow_ingest_hours_%' THEN dbus END) AS ingest_dbus,\n",
+        "         sum(CASE WHEN workload LIKE 'wikiflow_pageviews_%' THEN dbus END)    AS pipeline_dbus\n",
+        "    FROM usage\n",
+        "   GROUP BY usage_date\n",
+        ")\n",
+        "SELECT sum(h.hours_ingested)                                                   AS hours_ingested,\n",
+        "       round(sum(b.ingest_dbus), 3)                                            AS ingest_dbus,\n",
+        "       round(sum(b.ingest_dbus) / sum(h.hours_ingested), 4)                    AS ingest_dbus_per_hour,\n",
+        "       round(sum(b.pipeline_dbus) / sum(h.hours_ingested), 4)                  AS pipeline_dbus_per_hour,\n",
+        "       (SELECT date_format(max(usage_end_time), 'yyyy-MM-dd HH:mm') FROM usage) AS billed_through_utc\n",
+        "  FROM hours AS h\n",
+        "  JOIN billed AS b USING (usage_date)"
+      ]
     }
   ],
   "pages": [
@@ -1269,6 +1397,382 @@
             "y": 35,
             "width": 6,
             "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "cost",
+      "displayName": "Cost",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "cost_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# What it costs\n",
+                "\n",
+                "DBUs from `system.billing.usage` for this target's workloads (job and pipeline names ending in the target), divided by the hours `ops.ingest_audit` says were ingested. ",
+                "Billing lags behind the audit, so only days both sides cover are counted.\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_ingest_per_hour",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_summary",
+                  "fields": [
+                    {
+                      "name": "ingest_dbus_per_hour",
+                      "expression": "`ingest_dbus_per_hour`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "ingest_dbus_per_hour",
+                  "displayName": "Ingest DBUs per ingested hour"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ingest DBUs per ingested hour",
+                "showDescription": true,
+                "description": "wikiflow_ingest_hours job DBUs / successful ingest attempts, every day billed"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_pipeline_per_hour",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_summary",
+                  "fields": [
+                    {
+                      "name": "pipeline_dbus_per_hour",
+                      "expression": "`pipeline_dbus_per_hour`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pipeline_dbus_per_hour",
+                  "displayName": "Pipeline DBUs per ingested hour"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Pipeline DBUs per ingested hour",
+                "showDescription": true,
+                "description": "wikiflow_pageviews pipeline DBUs / the same hours"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_hours",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_summary",
+                  "fields": [
+                    {
+                      "name": "hours_ingested",
+                      "expression": "`hours_ingested`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "hours_ingested",
+                  "displayName": "Hours ingested (days billed)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Hours ingested (days billed)",
+                "showDescription": true,
+                "description": "Successful ingest attempts on days billing has reached"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_billed_through",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_summary",
+                  "fields": [
+                    {
+                      "name": "billed_through_utc",
+                      "expression": "`billed_through_utc`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "billed_through_utc",
+                  "displayName": "Billed through (UTC)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Billed through (UTC)",
+                "showDescription": true,
+                "description": "The newest usage_end_time for these workloads"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_by_workload",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_by_workload",
+                  "fields": [
+                    {
+                      "name": "workload",
+                      "expression": "`workload`"
+                    },
+                    {
+                      "name": "sum(dbus)",
+                      "expression": "SUM(`dbus`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "workload",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  },
+                  "displayName": "Workload"
+                },
+                "y": {
+                  "fieldName": "sum(dbus)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "DBUs"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DBUs by workload",
+                "showDescription": true,
+                "description": "Every day billed, this target only"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "c_per_day",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cost_per_hour",
+                  "fields": [
+                    {
+                      "name": "usage_date",
+                      "expression": "`usage_date`"
+                    },
+                    {
+                      "name": "hours_ingested",
+                      "expression": "`hours_ingested`"
+                    },
+                    {
+                      "name": "ingest_dbus",
+                      "expression": "`ingest_dbus`"
+                    },
+                    {
+                      "name": "ingest_dbus_per_hour",
+                      "expression": "`ingest_dbus_per_hour`"
+                    },
+                    {
+                      "name": "pipeline_dbus",
+                      "expression": "`pipeline_dbus`"
+                    },
+                    {
+                      "name": "pipeline_dbus_per_hour",
+                      "expression": "`pipeline_dbus_per_hour`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "usage_date",
+                    "displayName": "usage_date",
+                    "title": "Day",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "hours_ingested",
+                    "displayName": "hours_ingested",
+                    "title": "Hours ingested",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 1,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "ingest_dbus",
+                    "displayName": "ingest_dbus",
+                    "title": "Ingest DBUs",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 2,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "ingest_dbus_per_hour",
+                    "displayName": "ingest_dbus_per_hour",
+                    "title": "Ingest DBUs / hour",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 3,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "pipeline_dbus",
+                    "displayName": "pipeline_dbus",
+                    "title": "Pipeline DBUs",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 4,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "pipeline_dbus_per_hour",
+                    "displayName": "pipeline_dbus_per_hour",
+                    "title": "Pipeline DBUs / hour",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 5,
+                    "alignContent": "right"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Per day",
+                "showDescription": true,
+                "description": "DBUs and hours ingested per UTC day"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 5
           }
         }
       ]

@@ -12,9 +12,11 @@ DATASETS = {d["name"]: "".join(d["queryLines"]) for d in definition["datasets"]}
 
 
 def test_no_query_names_a_catalog_so_dataset_catalog_decides_per_target() -> None:
+    """The one catalog a query may name is `system` (billing, lineage): account-wide, the same in
+    every target. The cost page finds its target's workloads through current_catalog() instead."""
     for name, sql in DATASETS.items():
         assert not re.search(r"\bwikiflow(_sbx|_dev)?\.", sql), f"{name} names a catalog"
-        assert re.search(r"\b(gold|ops|silver)\.\w+", sql), f"{name} reads no published table"
+        assert re.search(r"\b(gold|ops|silver|system)\.\w+", sql), f"{name} reads no known table"
 
 
 def test_marts_and_ops_only_never_bronze_or_raw() -> None:
