@@ -67,7 +67,7 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 # Spark is provided by the serverless runtime, not installed locally.
-module = ["pyspark.*", "databricks.connect.*"]
+module = ["pyspark.*", "databricks.connect.*", "databricks.sdk.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

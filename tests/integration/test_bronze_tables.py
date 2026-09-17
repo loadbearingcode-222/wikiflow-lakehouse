@@ -12,13 +12,8 @@ from typing import Any
 
 import pytest
 
-from wikiflow.contracts import (
-    BRONZE_CONTRACTS,
-    DomainTotalRecord,
-    columns,
-    delta_constraints,
-    delta_statements,
-)
+from wikiflow.contracts import DomainTotalRecord, columns, delta_constraints
+from wikiflow.extract_spark import ensure_bronze_tables
 
 pytestmark = pytest.mark.integration
 
@@ -60,9 +55,8 @@ def planted_count(spark: Any) -> int:
 
 @pytest.fixture(scope="module", autouse=True)
 def bronze_tables(spark: Any) -> None:
-    for name, model in BRONZE_CONTRACTS.items():
-        for statement in delta_statements(model, f"wikiflow_sbx.bronze.{name}"):
-            spark.sql(statement)
+    # Creates the tables, or re-applies constraints only if they drifted from the contract.
+    ensure_bronze_tables(spark, "wikiflow_sbx")
 
 
 def test_the_table_carries_every_generated_constraint(spark: Any) -> None:
