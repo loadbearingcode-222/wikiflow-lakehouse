@@ -23,6 +23,10 @@ resources:
       tasks:
         - task_key: quality_checks
           environment_key: default
+          # A failed check is a finding, not a transient error. Serverless retries a failed task on
+          # its own unless told not to (measured: attempts 0 and 1, every result written twice).
+          max_retries: 0
+          disable_auto_optimization: true
           python_wheel_task:
             package_name: wikiflow
             entry_point: quality_checks
