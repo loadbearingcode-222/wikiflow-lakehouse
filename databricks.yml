@@ -1,0 +1,94 @@
+# wikiflow-lakehouse - one bundle, three targets, one knob that differs: ${var.catalog}.
+#
+#   sandbox  wikiflow_sbx   deployed from the laptop, from a story branch
+#   dev      wikiflow_dev   deployed by CI on every merge to main
+#   prod     wikiflow       deployed by CI when a release is published
+#
+# Only prod runs schedules. No target uses `mode: development`: it prefixes Unity Catalog names
+# too (bronze -> dev_<user>_bronze), so non-prod targets spell out the presets they want instead.
+# Catalogs are created once by scripts/bootstrap/create_catalogs.py: a bundle cannot create a
+# catalog on this workspace's Default Storage.
+
+bundle:
+  name: wikiflow-lakehouse
+
+include:
+  - resources/*.yml
+
+artifacts:
+  wikiflow:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+# The workspace gets what the jobs run, not the paper trail.
+sync:
+  exclude:
+    - ".github/**"
+    - ".githooks/**"
+    - "docs/**"
+    - "tests/**"
+    - "scripts/**"
+    - "*.md"
+    - "uv.lock"
+
+variables:
+  catalog:
+    description: The Unity Catalog every resource in this target reads and writes.
+  environment_version:
+    description: >-
+      Serverless environment for every Python task. 5 is GA (Python 3.12.3) and proven on this
+      workspace; 6 was two weeks old when this was pinned (2026-09-17).
+    default: "5"
+  warehouse_id:
+    description: The one SQL warehouse Free Edition allows, looked up by name, never pinned by id.
+    lookup:
+      warehouse: Serverless Starter Warehouse
+
+targets:
+  sandbox:
+    default: true
+    workspace:
+      host: https://dbc-5cb7afce-0a32.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/sandbox
+    presets:
+      trigger_pause_status: PAUSED
+      pipelines_development: true
+      tags:
+        env: sandbox
+    variables:
+      catalog: wikiflow_sbx
+
+  dev:
+    workspace:
+      host: https://dbc-5cb7afce-0a32.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev
+    presets:
+      trigger_pause_status: PAUSED
+      tags:
+        env: dev
+    variables:
+      catalog: wikiflow_dev
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-5cb7afce-0a32.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/prod
+    presets:
+      tags:
+        env: prod
+    variables:
+      catalog: wikiflow
+    # Prod holds the only copy of what has been ingested: deleting a schema or the raw volume
+    # by editing a file must fail loudly. Sandbox and dev stay freely destroyable.
+    resources:
+      schemas:
+        raw: {lifecycle: {prevent_destroy: true}}
+        reference: {lifecycle: {prevent_destroy: true}}
+        bronze: {lifecycle: {prevent_destroy: true}}
+        silver: {lifecycle: {prevent_destroy: true}}
+        gold: {lifecycle: {prevent_destroy: true}}
+        ops: {lifecycle: {prevent_destroy: true}}
+      volumes:
+        dumps: {lifecycle: {prevent_destroy: true}}

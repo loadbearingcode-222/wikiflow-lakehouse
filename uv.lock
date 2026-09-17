@@ -320,9 +320,9 @@ wheels = [
 ]
 
 [[package]]
-name = "wikiflow-lakehouse"
+name = "wikiflow"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [
