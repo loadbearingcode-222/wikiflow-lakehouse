@@ -93,3 +93,24 @@ stands in as the cost measure until M4-S3 builds the cost page from the real tab
 - An egress probe starts failing (build the file-arrival fallback).
 - DBUs per hour show that hourly would fit, or that 3-hourly does not (M4-S3).
 - The freshness threshold or the publication lag changes.
+
+## Revisited 2026-09-18 (M4-S3): measured DBUs
+
+`system.billing.usage` now holds same-day rows, three days sooner than when this ADR was written.
+The dashboard's Cost page divides each target's `wikiflow_ingest_hours` job and
+`wikiflow_pageviews` pipeline DBUs by the hours `ops.ingest_audit` records as ingested before
+billing's newest record.
+
+| Sandbox, 2026-09-17 (billed through 14:10 UTC) | Measured |
+|---|---|
+| Hours ingested | 58 |
+| Ingest job | 8.184 DBUs → **0.141 DBUs per ingested hour** |
+| Pipeline | 3.937 DBUs → **0.068 DBUs per ingested hour** |
+
+This is an upper bound. Sandbox's day was dozens of small test runs, each paying a run's fixed
+cost (task start, environment, session) for one to four hours, which is exactly the cost a
+3-hourly batch spreads. Hand-written SQL selecting the job by id reproduced 0.1411.
+
+**Decision stands: every 3 hours.** At the upper bound, prod's 24 hours a day cost about 5 DBUs.
+Hourly runs would pay the fixed cost 24 times instead of 8 for no gain in correctness, and the
+freshness check's 8-hour limit is met either way. Revisit when prod has a week of billing rows.

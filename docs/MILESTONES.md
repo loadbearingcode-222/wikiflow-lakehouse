@@ -44,7 +44,8 @@ wikiflow-lakehouse/
 │  ├─ job_raw_retention.yml                              M3-S2
 │  ├─ job_reprocess.yml                                  M3-S3
 │  ├─ dashboard_attention.yml                            M4-S1
-│  └─ genie_attention.yml                                M4-S2
+│  ├─ genie_attention.yml                                M4-S2
+│  └─ job_governance.yml                                 M4-S3  tags and bronze column comments, daily
 ├─ src/
 │  ├─ wikiflow/                                                 Python package, built as a wheel
 │  │  ├─ __init__.py                                     M0-S2
@@ -56,7 +57,8 @@ wikiflow-lakehouse/
 │  │  ├─ plan_hours.py                                   M1-S5
 │  │  ├─ quality.py                                      M3-S1
 │  │  ├─ retention.py                                    M3-S2
-│  │  └─ reprocess.py                                    M3-S3
+│  │  ├─ reprocess.py                                    M3-S3
+│  │  └─ governance.py                                   M4-S3
 │  ├─ pipelines/pageviews/                                      one file per table
 │  │  ├─ raw/ · silver/                                  M2-S1
 │  │  └─ gold/ · ops/                                    M2-S2
@@ -75,6 +77,7 @@ wikiflow-lakehouse/
 │  ├─ MILESTONES.md                                      M0-S1  this file
 │  ├─ adr/                                               M0-S4  numbered from 0010, after wikiflow's 0001–0009
 │  ├─ RUNBOOK.md                                         M3-S3
+│  ├─ LINEAGE.md                                         M4-S3  bronze → gold, traced from system tables
 │  └─ FAILURE_DRILLS.md                                  M5-S1
 ├─ CLAUDE.md                                             M0-S1  facts and traps, under 150 lines
 ├─ pyproject.toml · uv.lock · .python-version            M0-S1

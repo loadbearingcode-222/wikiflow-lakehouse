@@ -64,3 +64,5 @@ jobs:
       # up to a day away. Refreshing at release is also shrink-guarded, like any refresh.
       - name: The company filter is published before the first scheduled ingest
         run: databricks bundle run company_pages_refresh -t prod
+      - name: Unity Catalog tags and bronze column comments (a diff; the daily run keeps up with new tables)
+        run: databricks bundle run governance -t prod
