@@ -20,6 +20,10 @@ dev = [
 connect = [
     "databricks-connect>=19.1,<19.2",
 ]
+# scripts/cross_platform_parity.py reads wikiflow's DuckDB warehouse (M2-S4).
+parity = [
+    "duckdb>=1.1",
+]
 
 [project.scripts]
 # Entry points for python_wheel_task (resources/job_*.yml). Each maps to src/wikiflow/tasks/.
@@ -69,7 +73,7 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 # Spark is provided by the serverless runtime, not installed locally.
-module = ["pyspark.*", "databricks.connect.*", "databricks.sdk.*"]
+module = ["pyspark.*", "databricks.connect.*", "databricks.sdk.*", "duckdb.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
