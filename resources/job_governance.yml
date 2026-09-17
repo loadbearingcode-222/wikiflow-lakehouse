@@ -1,0 +1,31 @@
+# governance - Unity Catalog tags on every schema, table, view and volume, and column comments on
+# bronze, applied as a diff (M4-S3). Daily, because tables appear over time (the pipeline creates
+# its views on its first update); an unchanged catalog gets zero statements.
+resources:
+  jobs:
+    governance:
+      name: wikiflow_governance_${bundle.target}
+      description: >-
+        Daily - tag every object in the six schemas (project, layer, source, personal_data) and
+        comment bronze's columns, changing only what differs (M4-S3).
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+      schedule:
+        quartz_cron_expression: "0 0 5 * * ?"
+        timezone_id: UTC
+      tasks:
+        - task_key: apply_governance
+          environment_key: default
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: apply_governance
+            parameters: ["--catalog", "${var.catalog}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl

@@ -42,3 +42,5 @@ jobs:
         run: >-
           databricks bundle run ingest_hours -t dev
           --params start=2026-09-15T10,end=2026-09-15T11,max_hours=2,replace_present=true
+      - name: Unity Catalog tags and bronze column comments (a diff; zero statements when unchanged)
+        run: databricks bundle run governance -t dev
