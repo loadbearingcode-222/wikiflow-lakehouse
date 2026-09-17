@@ -125,3 +125,9 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    `'Toms'`: write `"Tom's"`.
 15. **A condition task compares only numbers, strings and booleans.** A list task value fails the
    run (`INTERNAL_ERROR ... not primitive`), so `plan_hours` also publishes `count`.
+16. **Serverless retries a failed task that sets no `max_retries`** (auto-optimization). A quality
+   failure ran twice and wrote every result twice. Tasks whose failure is a finding set
+   `max_retries: 0` and `disable_auto_optimization: true`.
+17. **Alerts v2 have no run-now.** To watch one fire, set its schedule to `0 * * * * ?` UNPAUSED
+   (`databricks alerts-v2 update-alert <id> schedule --json ...`) and let it tick;
+   `bundle deploy` puts the committed schedule back.

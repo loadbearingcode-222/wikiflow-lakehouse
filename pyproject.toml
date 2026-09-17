@@ -32,6 +32,7 @@ feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
 ingest_hour = "wikiflow.tasks.ingest_hour:main"
 plan_hours = "wikiflow.tasks.plan_hours:main"
 verify_run = "wikiflow.tasks.verify_run:main"
+quality_checks = "wikiflow.tasks.quality_checks:main"
 company_pages_refresh = "wikiflow.tasks.company_pages_refresh:main"
 
 [build-system]
