@@ -38,7 +38,7 @@ wikiflow-lakehouse/
 │  ├─ job_hello.yml                                      M0-S2
 │  ├─ job_feasibility_spike.yml                          M0-S4
 │  ├─ job_company_pages_refresh.yml                      M1-S3
-│  ├─ job_ingest_hours.yml                               M1-S2  grows: land (S2) → extract (S4) → plan + fan-out (S5)
+│  ├─ job_ingest_hours.yml                               M1-S2  grows: land (S2) → one ingest task per hour (S4) → plan + fan-out (S5)
 │  ├─ pipeline_pageviews.yml                             M2-S1
 │  ├─ job_quality_checks.yml · alerts_quality.yml        M3-S1
 │  ├─ job_raw_retention.yml                              M3-S2
