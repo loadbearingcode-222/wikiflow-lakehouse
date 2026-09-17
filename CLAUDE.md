@@ -48,7 +48,8 @@ none of the ceremony.
   time) `ingest_hour` → `verify_run`. One hour is ~30-90 s of task time; a 4-hour run took
   7 min 18 s end to end, and a run with nothing to plan 42 s (sandbox, 2026-09-17).
 - Each merge's dev smoke re-ingests 2026-09-15T10..11 and fails unless they reconcile and
-  reproduce earlier runs. Dev's filter was published once by hand (`company_pages_refresh -t dev`);
+  reproduce earlier runs, then refreshes the pageviews pipeline (whose `ops.reconciliation` fails
+  the update on a one-view difference). Dev's filter was published once by hand (`company_pages_refresh -t dev`);
   prod's is refreshed by deploy-prod at every release.
 - `system.billing.usage` lags ~3 days here (2026-09-17: newest row ended 2026-09-14 15:00).
 - Databricks Connect 19.1 from the laptop to serverless works (session in ~7 s).
@@ -89,7 +90,8 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    `presets: name_prefix: ""` does not switch it off. Non-prod targets spell out their presets.
    Ten-second check: `databricks bundle validate -t dev -o json` → `.resources.schemas`.
 5. **A job task that starts a pipeline overwrites the pipeline's `configuration`.** Pipeline SQL
-   uses two-part names, with the catalog taken from the pipeline's `catalog:` field.
+   uses two-part names, with the catalog taken from the pipeline's `catalog:` field; Python reads
+   `spark.conf.get("pipelines.catalog")`, which survived a job-started update (M2-S2, `JOB_TASK`).
 6. **A serverless task that names no environment gets its client from how it was launched.**
    Pin `environment_version` on every Python task.
 7. **One active pipeline per type is shared with NOAA.** Never let this project's pipeline update
@@ -114,10 +116,12 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    is refused (`PY4J_BLOCKED_API`), and `SELECT current_catalog()` at load time answers
    `workspace`. `spark.conf.get("pipelines.catalog")` is the pipeline's own `catalog:` field.
 13. **A materialized view that JOINS another view of the same pipeline can read its OLD version.**
-   When bronze and the joined view both changed in one update, the incremental refresh found no
-   match for every new title (sandbox, 2026-09-17, four updates). Apply per-row rules inline (see
-   `url_decode:begin` markers, kept identical by `test_pipeline_sql.py`), and re-check freshness
-   wherever gold joins silver.
+   A lookup view (page_titles) joined into silver missed every new title when both changed in one
+   update (M2-S1, four updates). Aggregates over pipeline views refreshed exactly (M2-S2, every mart
+   = bronze after a new hour). Apply per-row rules inline (`url_decode:begin` markers, kept identical
+   by `test_pipeline_sql.py`); pin view-to-view joins to `REFRESH POLICY FULL`.
 14. **Pipeline SQL details:** a materialized view with a `TIMESTAMP_NTZ` column needs
    `TBLPROPERTIES ('delta.feature.timestampNtz' = 'supported')`. Spark SQL reads `'Tom''s'` as
    `'Toms'`: write `"Tom's"`.
+15. **A condition task compares only numbers, strings and booleans.** A list task value fails the
+   run (`INTERNAL_ERROR ... not primitive`), so `plan_hours` also publishes `count`.

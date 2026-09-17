@@ -1,7 +1,8 @@
 # ingest_hours - grew story by story: M1-S2 landed one hour, M1-S4 ingested it into bronze with an
-# audit row per attempt, M1-S5 plans the missing hours, fans out over them and verifies the run.
+# audit row per attempt, M1-S5 plans the missing hours, fans out over them and verifies the run,
+# M2-S2 refreshes the pageviews pipeline once the run is verified.
 #
-#   plan_hours  ->  ingest_each_hour (for_each, 2 at a time)  ->  verify_run
+#   plan_hours -> ingest_each_hour (for_each, 2 at a time) -> verify_run -> any_hours_planned? -> refresh_pageviews
 #
 # Concurrency 2 and max_concurrent_runs 1 together cap downloads at 2 connections: the dump
 # server allows 3 per client IP (wikiflow once hit 429s by counting runs instead of downloads).
@@ -88,6 +89,28 @@ resources:
               - "{{job.run_id}}"
               - "--hours"
               - "{{tasks.plan_hours.values.hours}}"
+
+        # A run that planned nothing has nothing new for the marts, and a pipeline update is the
+        # most expensive step of a run.
+        - task_key: any_hours_planned
+          depends_on:
+            - task_key: verify_run
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.plan_hours.values.count}}"
+            right: "0"
+
+        # Unverified hours never reach the marts: this runs only after verify_run succeeded.
+        # Retried because NOAA's pipeline shares the one active pipeline slot (CLAUDE.md trap 7).
+        - task_key: refresh_pageviews
+          depends_on:
+            - task_key: any_hours_planned
+              outcome: "true"
+          max_retries: 2
+          min_retry_interval_millis: 600000
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pageviews.id}
+            full_refresh: false
 
       environments:
         - environment_key: default

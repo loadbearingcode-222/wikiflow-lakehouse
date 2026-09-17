@@ -82,6 +82,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     planned = [format_hour(hour) for hour in result.hours]
     set_task_value("hours", planned)
+    # A condition task can only compare numbers, strings and booleans, not the list (measured).
+    set_task_value("count", len(planned))
     print(
         "PLANNED " + json.dumps({"start": args.start, "end": format_hour(end)} | result.summary())
     )
