@@ -65,7 +65,7 @@ wikiflow-lakehouse/
 ├─ tests/
 │  ├─ unit/                                              M0-S1  grows every story
 │  ├─ fixtures/                                          M1-S1
-│  └─ integration/                                       M1-S4  Databricks Connect → sandbox
+│  └─ integration/                                       M1-S1  Databricks Connect → sandbox
 ├─ scripts/
 │  ├─ bootstrap/                                         M0-S2  one-time: catalogs + binds
 │  └─ benchmark_extraction.py                            M5-S2
