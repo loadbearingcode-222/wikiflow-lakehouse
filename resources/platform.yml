@@ -1,0 +1,40 @@
+# The layer everything lands in: six schemas and the raw volume, inside ${var.catalog}.
+#
+# The catalog itself is NOT declared here. On Free Edition's Default Storage the catalogs API a
+# bundle deploys through cannot create one, while SQL DDL can, so scripts/bootstrap/
+# create_catalogs.py creates wikiflow_sbx, wikiflow_dev and wikiflow once, idempotently.
+
+resources:
+  schemas:
+    raw:
+      name: raw
+      catalog_name: ${var.catalog}
+      comment: Wikimedia's files as published - the dumps volume and the projectviews oracle.
+    reference:
+      name: reference
+      catalog_name: ${var.catalog}
+      comment: The company filter (Wikidata sitelinks and redirects), one immutable snapshot per refresh.
+    bronze:
+      name: bronze
+      catalog_name: ${var.catalog}
+      comment: Two grains per hour under a strict contract - company pageviews and domain totals.
+    silver:
+      name: silver
+      catalog_name: ${var.catalog}
+      comment: Typed, decoded staging views over bronze.
+    gold:
+      name: gold
+      catalog_name: ${var.catalog}
+      comment: The marts - dimensions, the hourly fact, share of traffic, daily rollups.
+    ops:
+      name: ops
+      catalog_name: ${var.catalog}
+      comment: What ran and how it went - audit, reconciliation, quality results, retention manifests.
+
+  volumes:
+    dumps:
+      name: dumps
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.raw.name}
+      volume_type: MANAGED
+      comment: Hourly pageviews .gz and projectviews files, hive-partitioned by the hour they describe. 7-day retention.
