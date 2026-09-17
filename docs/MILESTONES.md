@@ -57,7 +57,7 @@ wikiflow-lakehouse/
 │  │  ├─ quality.py                                      M3-S1
 │  │  ├─ retention.py                                    M3-S2
 │  │  └─ reprocess.py                                    M3-S3
-│  ├─ pipelines/pageviews/                                      one .sql per table
+│  ├─ pipelines/pageviews/                                      one file per table
 │  │  ├─ raw/ · silver/                                  M2-S1
 │  │  └─ gold/ · ops/                                    M2-S2
 │  └─ dashboards/attention.lvdash.json                   M4-S1
