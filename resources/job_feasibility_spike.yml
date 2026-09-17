@@ -1,0 +1,23 @@
+resources:
+  jobs:
+    feasibility_spike:
+      name: wikiflow_feasibility_spike_${bundle.target}
+      description: >-
+        M0-S4 measurement, kept runnable so it can be repeated: can serverless compute reach
+        Wikimedia, how long does one hour take, and does Spark reconcile it to projectviews.
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      tasks:
+        - task_key: spike
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: feasibility_spike
+            parameters: ["--catalog", "${var.catalog}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl

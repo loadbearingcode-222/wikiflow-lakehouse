@@ -1,6 +1,6 @@
 [project]
 name = "wikiflow"
-version = "0.0.0"
+version = "0.1.0"
 description = "The wikiflow hourly Wikimedia pageviews pipeline, rebuilt on Databricks"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -17,6 +17,7 @@ dev = [
 [project.scripts]
 # Entry points for python_wheel_task (resources/job_*.yml). Each maps to src/wikiflow/tasks/.
 hello = "wikiflow.tasks.hello:main"
+feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
 
 [build-system]
 requires = ["hatchling"]
