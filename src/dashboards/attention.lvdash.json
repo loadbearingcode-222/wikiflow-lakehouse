@@ -1,0 +1,1277 @@
+{
+  "datasets": [
+    {
+      "name": "summary",
+      "displayName": "Headline numbers, one row",
+      "queryLines": [
+        "-- One row: the four headline tiles. Every number is read from a published table, never\n",
+        "-- recomputed here from bronze - the tiles are cross-checked against bronze by hand in M4-S1.\n",
+        "WITH hours AS (\n",
+        "  SELECT count(DISTINCT interval_start_utc) AS hours_loaded,\n",
+        "         date_format(min(interval_start_utc), 'yyyy-MM-dd HH:00') AS first_hour,\n",
+        "         date_format(max(interval_start_utc), 'yyyy-MM-dd HH:00') AS last_hour\n",
+        "    FROM gold.agg_company_share_of_traffic\n",
+        "),\n",
+        "wiki AS (\n",
+        "  SELECT coalesce(sum(hours_observed), 0) AS domain_hours,\n",
+        "         coalesce(sum(lifetime_views), 0) AS total_views\n",
+        "    FROM gold.dim_wiki\n",
+        "),\n",
+        "fact AS (\n",
+        "  SELECT count(*) AS fact_rows, coalesce(sum(views), 0) AS company_views\n",
+        "    FROM gold.fct_company_pageviews_hourly\n",
+        "),\n",
+        "recon AS (\n",
+        "  SELECT count(*) AS hours_reconciled,\n",
+        "         coalesce(sum(domains), 0) AS domain_hours_reconciled,\n",
+        "         coalesce(sum(mismatched_domains), 0) AS domains_off\n",
+        "    FROM ops.reconciliation\n",
+        ")\n",
+        "SELECT hours.hours_loaded,\n",
+        "       hours.first_hour,\n",
+        "       hours.last_hour,\n",
+        "       wiki.total_views,\n",
+        "       round(wiki.total_views / 1e6, 1) AS million_views_analysed,\n",
+        "       fact.company_views,\n",
+        "       round(100 * fact.company_views / nullif(wiki.total_views, 0), 4) AS tracked_share_pct,\n",
+        "       recon.hours_reconciled,\n",
+        "       recon.domain_hours_reconciled,\n",
+        "       recon.domains_off\n",
+        "  FROM hours CROSS JOIN wiki CROSS JOIN fact CROSS JOIN recon"
+      ]
+    },
+    {
+      "name": "company_hourly",
+      "displayName": "Views and share of all traffic, per company per hour",
+      "queryLines": [
+        "-- gold.agg_company_share_of_traffic whole: seven companies x a few thousand hours at most.\n",
+        "SELECT interval_start_utc,\n",
+        "       company_name,\n",
+        "       company_views,\n",
+        "       total_views,\n",
+        "       round(100 * share_of_traffic, 5) AS share_of_traffic_pct\n",
+        "  FROM gold.agg_company_share_of_traffic"
+      ]
+    },
+    {
+      "name": "languages",
+      "displayName": "Views per language edition, per company, long tail folded",
+      "queryLines": [
+        "-- Top 12 language editions per company, the rest folded into one \"Other\" bar - folded, not\n",
+        "-- dropped, so the bars still account for every view (wikiflow's metrics.language_breakdown).\n",
+        "WITH per_language AS (\n",
+        "  SELECT company_name, coalesce(wiki_language, '(none)') AS language, sum(views) AS views\n",
+        "    FROM gold.fct_company_pageviews_hourly\n",
+        "   GROUP BY company_name, coalesce(wiki_language, '(none)')\n",
+        "),\n",
+        "ranked AS (\n",
+        "  SELECT *, row_number() OVER (PARTITION BY company_name ORDER BY views DESC, language) AS rank,\n",
+        "         count(*) OVER (PARTITION BY company_name) AS editions\n",
+        "    FROM per_language\n",
+        ")\n",
+        "SELECT company_name,\n",
+        "       CASE WHEN rank <= 12 THEN language ELSE concat('Other (', editions - 12, ' editions)') END AS language,\n",
+        "       sum(views) AS views\n",
+        "  FROM ranked\n",
+        " GROUP BY company_name, CASE WHEN rank <= 12 THEN language ELSE concat('Other (', editions - 12, ' editions)') END"
+      ]
+    },
+    {
+      "name": "access",
+      "displayName": "Mobile and redirect share of each company's views",
+      "queryLines": [
+        "SELECT company_name,\n",
+        "       sum(views) AS views,\n",
+        "       round(100 * sum(CASE WHEN access_method = 'mobile-web' THEN views ELSE 0 END) / nullif(sum(views), 0), 1) AS mobile_share_pct,\n",
+        "       round(100 * sum(CASE WHEN match_type = 'redirect' THEN views ELSE 0 END) / nullif(sum(views), 0), 1) AS redirect_share_pct\n",
+        "  FROM gold.fct_company_pageviews_hourly\n",
+        " GROUP BY company_name"
+      ]
+    },
+    {
+      "name": "health",
+      "displayName": "Pipeline health, one row",
+      "queryLines": [
+        "-- From the audit trail: one row per attempt, failures included. Timing uses ingests only:\n",
+        "-- hours rebuilt from raw skip the download and would make the median read fast.\n",
+        "SELECT count(*) AS attempts,\n",
+        "       count_if(status <> 'success') AS failed_attempts,\n",
+        "       round(percentile(CASE WHEN task_key = 'ingest_hour' AND status = 'success' THEN duration_seconds END, 0.5), 0) AS median_ingest_seconds,\n",
+        "       date_format(max(CASE WHEN task_key = 'ingest_hour' AND status = 'success' THEN finished_at END), 'yyyy-MM-dd HH:mm') AS last_successful_ingest_utc\n",
+        "  FROM ops.ingest_audit"
+      ]
+    },
+    {
+      "name": "attempts",
+      "displayName": "The latest ingestion attempts",
+      "queryLines": [
+        "SELECT date_format(started_at, 'yyyy-MM-dd HH:mm') AS attempted_utc,\n",
+        "       date_format(interval_start_utc, 'yyyy-MM-dd HH:00') AS hour_utc,\n",
+        "       CASE task_key WHEN 'ingest_hour' THEN 'Ingested' WHEN 'reprocess_hour' THEN 'Rebuilt from raw' ELSE task_key END AS how,\n",
+        "       attempt,\n",
+        "       status,\n",
+        "       round(duration_seconds, 0) AS seconds,\n",
+        "       line_count,\n",
+        "       company_rows,\n",
+        "       domains_mismatched,\n",
+        "       coalesce(error, '') AS error\n",
+        "  FROM ops.ingest_audit\n",
+        " ORDER BY started_at DESC\n",
+        " LIMIT 50"
+      ]
+    },
+    {
+      "name": "quality",
+      "displayName": "The latest result of each quality check",
+      "queryLines": [
+        "SELECT check_name,\n",
+        "       status,\n",
+        "       date_format(checked_at, 'yyyy-MM-dd HH:mm') AS checked_utc,\n",
+        "       detail\n",
+        "  FROM (\n",
+        "    SELECT *, row_number() OVER (PARTITION BY check_name ORDER BY checked_at DESC) AS newest\n",
+        "      FROM ops.quality_results\n",
+        "  )\n",
+        " WHERE newest = 1"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "attention",
+      "displayName": "Attention",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Attention on Wikipedia\n",
+                "\n",
+                "How public attention to seven big tech entities moves hour by hour across every language edition of Wikipedia, and what share of all Wikimedia traffic it is. ",
+                "Every panel reads the gold marts or the ops tables; `ops.reconciliation` compares every loaded hour with Wikimedia's own projectviews, domain by domain, and a single view off fails the pipeline update.\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_companies",
+            "queries": [
+              {
+                "name": "f_companies_company_hourly",
+                "query": {
+                  "datasetName": "company_hourly",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "company_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_companies_languages",
+                "query": {
+                  "datasetName": "languages",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "company_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_companies_access",
+                "query": {
+                  "datasetName": "access",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "company_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "company_name",
+                    "displayName": "Company",
+                    "queryName": "f_companies_company_hourly"
+                  },
+                  {
+                    "fieldName": "company_name",
+                    "displayName": "Company",
+                    "queryName": "f_companies_languages"
+                  },
+                  {
+                    "fieldName": "company_name",
+                    "displayName": "Company",
+                    "queryName": "f_companies_access"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Companies"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_focus",
+            "queries": [
+              {
+                "name": "f_focus_languages",
+                "query": {
+                  "datasetName": "languages",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "company_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "company_name",
+                    "displayName": "Company",
+                    "queryName": "f_focus_languages"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Language breakdown for"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "t_hours",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "summary",
+                  "fields": [
+                    {
+                      "name": "hours_loaded",
+                      "expression": "`hours_loaded`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "hours_loaded",
+                  "displayName": "Hours loaded"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Hours loaded",
+                "showDescription": true,
+                "description": "Distinct hours in gold.agg_company_share_of_traffic"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "t_views",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "summary",
+                  "fields": [
+                    {
+                      "name": "million_views_analysed",
+                      "expression": "`million_views_analysed`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "million_views_analysed",
+                  "displayName": "Views analysed (millions)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Views analysed (millions)",
+                "showDescription": true,
+                "description": "Every view in every hour loaded, across all Wikimedia projects (gold.dim_wiki)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 3,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "t_share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "summary",
+                  "fields": [
+                    {
+                      "name": "tracked_share_pct",
+                      "expression": "`tracked_share_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "tracked_share_pct",
+                  "displayName": "Tracked companies' share (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Tracked companies' share (%)",
+                "showDescription": true,
+                "description": "Views about the seven tracked entities, as a share of all views"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 3,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "t_reconciliation",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "summary",
+                  "fields": [
+                    {
+                      "name": "domains_off",
+                      "expression": "`domains_off`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "domains_off",
+                  "displayName": "Domains off vs Wikimedia"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Domains off vs Wikimedia",
+                "showDescription": true,
+                "description": "0 = an exact match: every domain-hour in ops.reconciliation equals Wikimedia's projectviews"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 3,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "p_views",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "company_hourly",
+                  "fields": [
+                    {
+                      "name": "interval_start_utc",
+                      "expression": "`interval_start_utc`"
+                    },
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "sum(company_views)",
+                      "expression": "SUM(`company_views`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "interval_start_utc",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Hour (UTC)"
+                },
+                "y": {
+                  "fieldName": "sum(company_views)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Views per hour"
+                },
+                "color": {
+                  "fieldName": "company_name",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Company"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Attention over time: views per hour",
+                "showDescription": true,
+                "description": "gold.agg_company_share_of_traffic - redirect views included"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "p_share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "company_hourly",
+                  "fields": [
+                    {
+                      "name": "interval_start_utc",
+                      "expression": "`interval_start_utc`"
+                    },
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "sum(share_of_traffic_pct)",
+                      "expression": "SUM(`share_of_traffic_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "interval_start_utc",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Hour (UTC)"
+                },
+                "y": {
+                  "fieldName": "sum(share_of_traffic_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Share of all Wikimedia views (%)"
+                },
+                "color": {
+                  "fieldName": "company_name",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Company"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Attention over time: share of all traffic",
+                "showDescription": true,
+                "description": "Company views divided by every view that hour, unparseable domains included"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "p_languages",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "languages",
+                  "fields": [
+                    {
+                      "name": "language",
+                      "expression": "`language`"
+                    },
+                    {
+                      "name": "sum(views)",
+                      "expression": "SUM(`views`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "language",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  },
+                  "displayName": "Language edition"
+                },
+                "y": {
+                  "fieldName": "sum(views)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Views"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "By language edition",
+                "showDescription": true,
+                "description": "Top 12 editions of the company picked above; the rest folded into Other so every view is counted"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "p_mobile",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "access",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "sum(mobile_share_pct)",
+                      "expression": "SUM(`mobile_share_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "company_name",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  },
+                  "displayName": "Company"
+                },
+                "y": {
+                  "fieldName": "sum(mobile_share_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Share of views from the mobile web (%)"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Mobile share of views",
+                "showDescription": true,
+                "description": "Views counted under a redirect title are included; their share is in the table below"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 17,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "p_access_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "access",
+                  "fields": [
+                    {
+                      "name": "company_name",
+                      "expression": "`company_name`"
+                    },
+                    {
+                      "name": "views",
+                      "expression": "`views`"
+                    },
+                    {
+                      "name": "mobile_share_pct",
+                      "expression": "`mobile_share_pct`"
+                    },
+                    {
+                      "name": "redirect_share_pct",
+                      "expression": "`redirect_share_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "company_name",
+                    "displayName": "company_name",
+                    "title": "Company",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "views",
+                    "displayName": "views",
+                    "title": "Views",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 1,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "mobile_share_pct",
+                    "displayName": "mobile_share_pct",
+                    "title": "Mobile %",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 2,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "redirect_share_pct",
+                    "displayName": "redirect_share_pct",
+                    "title": "Via redirect %",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 3,
+                    "alignContent": "right"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Access and redirects",
+                "showDescription": true,
+                "description": "A reader who asked for Apple_Computer and landed on Apple Inc. counts under redirect"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 24,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "health_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Pipeline health\n",
+                "\n",
+                "From ops.ingest_audit (one row per attempt, failures included) and ops.quality_results (the checks the alerts read).\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 28,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "h_attempts",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "attempts",
+                      "expression": "`attempts`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "attempts",
+                  "displayName": "Attempts recorded"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Attempts recorded",
+                "showDescription": true,
+                "description": "Every ingest and reprocess attempt, per hour"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 29,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "h_failed",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "failed_attempts",
+                      "expression": "`failed_attempts`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "failed_attempts",
+                  "displayName": "Failed attempts"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Failed attempts",
+                "showDescription": true,
+                "description": "Retried attempts that later succeeded still count here - that is the point"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 29,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "h_median",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "median_ingest_seconds",
+                      "expression": "`median_ingest_seconds`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "median_ingest_seconds",
+                  "displayName": "Median ingest (s)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Median ingest (s)",
+                "showDescription": true,
+                "description": "Ingests only, download included; hours rebuilt from raw excluded"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 29,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "h_last",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "last_successful_ingest_utc",
+                      "expression": "`last_successful_ingest_utc`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "last_successful_ingest_utc",
+                  "displayName": "Last successful ingest (UTC)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Last successful ingest (UTC)",
+                "showDescription": true,
+                "description": "finished_at of the newest successful ingest"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 29,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "h_quality",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "quality",
+                  "fields": [
+                    {
+                      "name": "check_name",
+                      "expression": "`check_name`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "checked_utc",
+                      "expression": "`checked_utc`"
+                    },
+                    {
+                      "name": "detail",
+                      "expression": "`detail`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "check_name",
+                    "displayName": "check_name",
+                    "title": "Check",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "status",
+                    "title": "Status",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 1,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "checked_utc",
+                    "displayName": "checked_utc",
+                    "title": "Checked (UTC)",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 2,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "detail",
+                    "displayName": "detail",
+                    "title": "Detail",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 3,
+                    "alignContent": "left"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Quality checks, newest result each",
+                "showDescription": true,
+                "description": "gaps, freshness, volume anomaly, mart lag (M3-S1)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 31,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "h_attempts_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "attempts",
+                  "fields": [
+                    {
+                      "name": "attempted_utc",
+                      "expression": "`attempted_utc`"
+                    },
+                    {
+                      "name": "hour_utc",
+                      "expression": "`hour_utc`"
+                    },
+                    {
+                      "name": "how",
+                      "expression": "`how`"
+                    },
+                    {
+                      "name": "attempt",
+                      "expression": "`attempt`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "seconds",
+                      "expression": "`seconds`"
+                    },
+                    {
+                      "name": "line_count",
+                      "expression": "`line_count`"
+                    },
+                    {
+                      "name": "company_rows",
+                      "expression": "`company_rows`"
+                    },
+                    {
+                      "name": "domains_mismatched",
+                      "expression": "`domains_mismatched`"
+                    },
+                    {
+                      "name": "error",
+                      "expression": "`error`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "attempted_utc",
+                    "displayName": "attempted_utc",
+                    "title": "Attempted (UTC)",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "hour_utc",
+                    "displayName": "hour_utc",
+                    "title": "Hour (UTC)",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 1,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "how",
+                    "displayName": "how",
+                    "title": "How",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 2,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "attempt",
+                    "displayName": "attempt",
+                    "title": "Try",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 3,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "status",
+                    "title": "Status",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 4,
+                    "alignContent": "left"
+                  },
+                  {
+                    "fieldName": "seconds",
+                    "displayName": "seconds",
+                    "title": "Seconds",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 5,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "line_count",
+                    "displayName": "line_count",
+                    "title": "Lines",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 6,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "company_rows",
+                    "displayName": "company_rows",
+                    "title": "Company rows",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 7,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "domains_mismatched",
+                    "displayName": "domains_mismatched",
+                    "title": "Domains off",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 8,
+                    "alignContent": "right"
+                  },
+                  {
+                    "fieldName": "error",
+                    "displayName": "error",
+                    "title": "Error",
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 9,
+                    "alignContent": "left"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Latest ingestion attempts",
+                "showDescription": true,
+                "description": "The newest 50 rows of ops.ingest_audit"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 35,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    }
+  ]
+}
