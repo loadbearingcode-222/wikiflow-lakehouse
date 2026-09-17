@@ -110,3 +110,14 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    (sandbox run 744903363204838). Tables are created and migrated in `plan_hours`, before the
    fan-out. Concurrent `REPLACE WHERE` writes of DIFFERENT hours to the same clustered table
    did not conflict (4 hours, 2 at a time, WriteSerializable).
+12. **Pipeline Python cannot find its catalog the obvious ways.** `spark.catalog.currentCatalog()`
+   is refused (`PY4J_BLOCKED_API`), and `SELECT current_catalog()` at load time answers
+   `workspace`. `spark.conf.get("pipelines.catalog")` is the pipeline's own `catalog:` field.
+13. **A materialized view that JOINS another view of the same pipeline can read its OLD version.**
+   When bronze and the joined view both changed in one update, the incremental refresh found no
+   match for every new title (sandbox, 2026-09-17, four updates). Apply per-row rules inline (see
+   `url_decode:begin` markers, kept identical by `test_pipeline_sql.py`), and re-check freshness
+   wherever gold joins silver.
+14. **Pipeline SQL details:** a materialized view with a `TIMESTAMP_NTZ` column needs
+   `TBLPROPERTIES ('delta.feature.timestampNtz' = 'supported')`. Spark SQL reads `'Tom''s'` as
+   `'Toms'`: write `"Tom's"`.
