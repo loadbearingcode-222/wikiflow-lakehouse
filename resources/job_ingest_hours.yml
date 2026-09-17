@@ -14,6 +14,9 @@ resources:
         Every 3 hours (prod) - plan the published hours bronze lacks, ingest each (land verified,
         extract both grains, audit), then verify every hour reconciled with projectviews (M1-S5).
       max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
       timeout_seconds: 14400
       schedule:
         # ADR 0010: every 3 hours; at :20, since an hour is published ~1-4 h after it ends.

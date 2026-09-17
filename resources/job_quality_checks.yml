@@ -11,6 +11,9 @@ resources:
         Every 3 hours (prod), 30 minutes after ingest_hours starts - gaps, freshness, same-hour
         volume anomalies, and marts lagging bronze; results in ops.quality_results (M3-S1).
       max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
       timeout_seconds: 1800
       schedule:
         quartz_cron_expression: "0 50 0/3 * * ?"

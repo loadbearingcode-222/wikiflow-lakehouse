@@ -16,6 +16,13 @@ resources:
       serverless: true
       channel: CURRENT
       continuous: false
+      notifications:
+        - email_recipients:
+            - ${workspace.current_user.userName}
+          alerts:
+            - on-update-failure
+            - on-update-fatal-failure
+            - on-flow-failure
       root_path: ../src/pipelines/pageviews
       libraries:
         - glob:
