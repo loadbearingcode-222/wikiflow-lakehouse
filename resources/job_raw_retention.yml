@@ -10,6 +10,9 @@ resources:
         Daily - raw volume partitions dated more than 7 days back are planned into
         ops.retention_manifest, then deleted exactly as planned; refuses to expire everything (M3-S2).
       max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
       timeout_seconds: 1800
       schedule:
         quartz_cron_expression: "0 0 4 * * ?"

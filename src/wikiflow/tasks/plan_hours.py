@@ -16,8 +16,10 @@ import argparse
 import json
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from wikiflow import reprocess
 from wikiflow.audit import ensure_audit_table
 from wikiflow.extract_spark import ensure_bronze_tables
 from wikiflow.plan_hours import (
@@ -48,6 +50,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=["true", "false"],
         help="also re-ingest hours bronze already holds (the dev smoke test)",
     )
+    parser.add_argument(
+        "--source",
+        default="wikimedia",
+        choices=["wikimedia", "raw"],
+        help="where an hour counts as available: Wikimedia's listing, or the raw volume (reprocess)",
+    )
     return parser.parse_args(argv)
 
 
@@ -73,9 +81,14 @@ def main(argv: list[str] | None = None) -> None:
     ensure_bronze_tables(spark, args.catalog)
     ensure_audit_table(spark, args.catalog)
 
+    available = (
+        reprocess.raw_hours(Path(f"/Volumes/{args.catalog}/raw/dumps"))
+        if args.source == "raw"
+        else fetch_published(start, end)
+    )
     result = plan(
         hours_between(start, end),
-        fetch_published(start, end),
+        available,
         present_hours(spark, args.catalog, start, end),
         max_hours=args.max_hours,
         replace_present=args.replace_present == "true",
@@ -85,7 +98,10 @@ def main(argv: list[str] | None = None) -> None:
     # A condition task can only compare numbers, strings and booleans, not the list (measured).
     set_task_value("count", len(planned))
     print(
-        "PLANNED " + json.dumps({"start": args.start, "end": format_hour(end)} | result.summary())
+        "PLANNED "
+        + json.dumps(
+            {"start": args.start, "end": format_hour(end), "source": args.source} | result.summary()
+        )
     )
 
 

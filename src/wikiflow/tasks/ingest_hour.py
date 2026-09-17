@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from wikiflow import download, extract_spark
+from wikiflow import download, extract_spark, reprocess
 from wikiflow.audit import IngestAudit, RunContext, parse_projectviews, write_audit
 from wikiflow.source import HourlyDump
 
@@ -42,14 +42,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--task-run-id", default="local")
     parser.add_argument("--task-key", default="ingest_hour")
     parser.add_argument("--attempt", type=int, default=1, help="{{task.execution_count}}")
+    parser.add_argument(
+        "--source",
+        default="wikimedia",
+        choices=["wikimedia", "raw"],
+        help="raw: rebuild from files already landed, without downloading (M3-S3 reprocess)",
+    )
     return parser.parse_args(argv)
 
 
-def ingest(spark: Any, catalog: str, dump: HourlyDump, run: RunContext) -> IngestAudit:
-    """Land, extract, audit. Returns the success record; on failure audits and re-raises."""
+def ingest(
+    spark: Any, catalog: str, dump: HourlyDump, run: RunContext, *, source: str = "wikimedia"
+) -> IngestAudit:
+    """Land (or re-verify), extract, audit. Returns the success record; on failure audits and
+    re-raises."""
     record = IngestAudit.begin(run, dump)
+    raw_root = Path(f"/Volumes/{catalog}/raw/dumps")
     try:
-        landed = download.land_hour(dump, Path(f"/Volumes/{catalog}/raw/dumps"))
+        if source == "raw":
+            landed = reprocess.verify_landed(dump, raw_root)
+        else:
+            landed = download.land_hour(dump, raw_root)
         pageviews = landed["pageviews"].download
         record = record.landed(pageviews)
         hour = extract_spark.extract_hour(spark, catalog, dump, expected_lines=pageviews.line_count)
@@ -90,12 +103,14 @@ def main(argv: list[str] | None = None) -> None:
         args.catalog,
         HourlyDump.for_interval(interval_start),
         run,
+        source=args.source,
     )
     print(
         "INGESTED "
         + json.dumps(
             {
                 "hour": args.hour,
+                "source": args.source,
                 "attempt": record.attempt,
                 "filter_snapshot": record.filter_snapshot,
                 "line_count": record.line_count,

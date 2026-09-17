@@ -1,0 +1,119 @@
+# reprocess - rebuild bronze hours from the raw volume, never contacting Wikimedia (M3-S3).
+#
+# The ingest path with its source swapped: plan_hours lists hours whose raw files are in the
+# volume (not Wikimedia's listing), and each ingest_hour re-verifies the landed files instead of
+# downloading. Audit, reconciliation, verify_run and the pipeline refresh are ingest_hours' own.
+# Runbook: docs/RUNBOOK.md, "An hour is wrong or missing in bronze".
+resources:
+  jobs:
+    reprocess:
+      name: wikiflow_reprocess_${bundle.target}
+      description: >-
+        On demand - rebuild the bronze hours start..end from raw files already landed (no
+        download), verify them like any ingest, then refresh the pageviews pipeline (M3-S3).
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+      parameters:
+        - name: start
+          default: ""  # required in practice: the first hour to rebuild, e.g. 2026-09-16T12
+        - name: end
+          default: ""
+        - name: max_hours
+          default: "168"  # the whole 7-day raw window
+      tasks:
+        - task_key: plan_hours
+          environment_key: default
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: plan_hours
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--source"
+              - "raw"
+              - "--replace-present"
+              - "true"
+              - "--start"
+              - "{{job.parameters.start}}"
+              - "--end"
+              - "{{job.parameters.end}}"
+              - "--max-hours"
+              - "{{job.parameters.max_hours}}"
+
+        - task_key: reprocess_each_hour
+          depends_on:
+            - task_key: plan_hours
+          for_each_task:
+            inputs: "{{tasks.plan_hours.values.hours}}"
+            # No download, so the dump server's connection limit does not apply. Three leaves
+            # room under Free Edition's five concurrent tasks.
+            concurrency: 3
+            task:
+              task_key: reprocess_hour
+              environment_key: default
+              timeout_seconds: 1800
+              max_retries: 1
+              min_retry_interval_millis: 60000
+              python_wheel_task:
+                package_name: wikiflow
+                entry_point: ingest_hour
+                parameters:
+                  - "--catalog"
+                  - "${var.catalog}"
+                  - "--source"
+                  - "raw"
+                  - "--hour"
+                  - "{{input}}"
+                  - "--job-run-id"
+                  - "{{job.run_id}}"
+                  - "--task-run-id"
+                  - "{{task.run_id}}"
+                  - "--task-key"
+                  - "{{task.name}}"
+                  - "--attempt"
+                  - "{{task.execution_count}}"
+
+        - task_key: verify_run
+          depends_on:
+            - task_key: reprocess_each_hour
+          environment_key: default
+          max_retries: 0
+          disable_auto_optimization: true
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: verify_run
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--job-run-id"
+              - "{{job.run_id}}"
+              - "--hours"
+              - "{{tasks.plan_hours.values.hours}}"
+
+        - task_key: any_hours_planned
+          depends_on:
+            - task_key: verify_run
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.plan_hours.values.count}}"
+            right: "0"
+
+        - task_key: refresh_pageviews
+          depends_on:
+            - task_key: any_hours_planned
+              outcome: "true"
+          max_retries: 2
+          min_retry_interval_millis: 600000
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pageviews.id}
+            full_refresh: false
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl
