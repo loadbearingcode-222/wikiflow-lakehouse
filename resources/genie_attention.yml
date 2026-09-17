@@ -1,0 +1,16 @@
+# attention genie - ask the marts in plain language (M4-S2). Declared here, never built in the UI:
+# the .geniespace.json IS the space, and `bundle deploy` overwrites anything added in the browser.
+#
+# Unlike a dashboard, a Genie space has no dataset_catalog: its data sources and certified SQL are
+# fully qualified, so the file carries ${var.catalog} and the CLI substitutes it per target.
+# tests/integration/test_genie_certified.py checks each certified SQL against hand-written SQL.
+resources:
+  genie_spaces:
+    attention_genie:
+      title: wikiflow - attention on Wikipedia (${var.catalog})
+      description: >-
+        Ask about public attention to seven big tech entities on Wikipedia, hour by hour - views,
+        share of all Wikimedia traffic, language editions, mobile and redirect views, and whether
+        each hour matched Wikimedia's own totals. Answers come from the gold marts and ops tables.
+      file_path: ../src/genie/attention.geniespace.json
+      warehouse_id: ${var.warehouse_id}

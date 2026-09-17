@@ -1,0 +1,148 @@
+{
+  "version": 2,
+  "config": {
+    "sample_questions": [
+      {
+        "id": "0135fa339bd115c2ca979af68f0cb7f8",
+        "question": [
+          "Which tracked company got the most Wikipedia views?"
+        ]
+      },
+      {
+        "id": "0252d1b6b98ae54b966feaf3b6af3003",
+        "question": [
+          "What share of all Wikimedia traffic did Google get each day?"
+        ]
+      },
+      {
+        "id": "03d08a803d84061e4687cace959fc014",
+        "question": [
+          "Which language editions of Wikipedia gave Apple Inc. the most views?"
+        ]
+      },
+      {
+        "id": "04571c4da516b05621d38cc3d0ff934e",
+        "question": [
+          "What share of each company's views came from the mobile web?"
+        ]
+      },
+      {
+        "id": "05a63b075d34701f3827256a3d1bff5b",
+        "question": [
+          "Did the loaded hours match Wikimedia's own published totals?"
+        ]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.gold.agg_company_daily"
+      },
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.gold.agg_company_share_of_traffic"
+      },
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.gold.dim_company"
+      },
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.gold.dim_wiki"
+      },
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.gold.fct_company_pageviews_hourly"
+      },
+      {
+        "identifier": "${resources.schemas.gold.catalog_name}.ops.reconciliation"
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "0002099f78bda07c9d5105863741d91b",
+        "content": [
+          "This space answers questions about public attention to seven tracked entities on Wikipedia, hour by hour.\n",
+          "The entities are Wikidata items: Amazon (Q3884), Apple Inc. (Q312), Microsoft (Q2283), Google (Q95), Alphabet Inc. (Q20800404), Meta Platforms (Q380) and Facebook (Q355). Facebook (the service) and Meta Platforms (the company) are separate entities on purpose; Google and Alphabet likewise. Match companies by company_name exactly as written here.\n",
+          "Views are Wikimedia pageviews: one row in the source per page per hour. Every time is an hour in UTC; view_hour 0-23 and interval_start_utc name the hour the views happened in.\n",
+          "share_of_traffic in gold.agg_company_share_of_traffic is a company's views divided by ALL Wikimedia views that hour, across every project and language. Express it as a percentage with 4 decimal places; it is always tiny (hundredths of a percent).\n",
+          "A daily share is sum(company_views) / sum(total_views) over the day's rows for that company, never an average of hourly shares.\n",
+          "match_type 'redirect' means the reader requested another title (for example Apple_Computer) and landed on the company's article; those views are included in every total. match_type 'sitelink' is the article itself.\n",
+          "access_method is 'desktop' or 'mobile-web'. wiki_language is the language edition (for example en, de, ja); wiki_project is wikipedia, wikiquote, and so on.\n",
+          "gold.dim_company holds lifetime totals per company; gold.agg_company_daily holds one row per company per day with mobile_views and desktop_views; gold.fct_company_pageviews_hourly is the detailed fact per hour, company, domain and article.\n",
+          "ops.reconciliation has one row per hour comparing the lakehouse's per-domain totals with Wikimedia's own projectviews file; mismatched_domains = 0 means an exact match.\n",
+          "Prefer the gold tables. Do not invent tables or columns."
+        ]
+      }
+    ],
+    "example_question_sqls": [
+      {
+        "id": "0135fa339bd115c2ca979af68f0cb7f8",
+        "question": [
+          "Which tracked company got the most Wikipedia views?"
+        ],
+        "sql": [
+          "SELECT company_name,\n",
+          "       lifetime_views\n",
+          "  FROM ${resources.schemas.gold.catalog_name}.gold.dim_company\n",
+          " ORDER BY lifetime_views DESC"
+        ]
+      },
+      {
+        "id": "0252d1b6b98ae54b966feaf3b6af3003",
+        "question": [
+          "What share of all Wikimedia traffic did Google get each day?"
+        ],
+        "sql": [
+          "SELECT view_date,\n",
+          "       round(100 * sum(company_views) / sum(total_views), 4) AS share_of_traffic_pct\n",
+          "  FROM ${resources.schemas.gold.catalog_name}.gold.agg_company_share_of_traffic\n",
+          " WHERE company_name = 'Google'\n",
+          " GROUP BY view_date\n",
+          " ORDER BY view_date"
+        ]
+      },
+      {
+        "id": "03d08a803d84061e4687cace959fc014",
+        "question": [
+          "Which language editions of Wikipedia gave Apple Inc. the most views?"
+        ],
+        "sql": [
+          "SELECT wiki_language,\n",
+          "       sum(views) AS views\n",
+          "  FROM ${resources.schemas.gold.catalog_name}.gold.fct_company_pageviews_hourly\n",
+          " WHERE company_name = 'Apple Inc.'\n",
+          " GROUP BY wiki_language\n",
+          " ORDER BY views DESC, wiki_language\n",
+          " LIMIT 10"
+        ]
+      },
+      {
+        "id": "04571c4da516b05621d38cc3d0ff934e",
+        "question": [
+          "What share of each company's views came from the mobile web?"
+        ],
+        "sql": [
+          "SELECT company_name,\n",
+          "       round(100 * sum(mobile_views) / sum(views), 1) AS mobile_share_pct\n",
+          "  FROM ${resources.schemas.gold.catalog_name}.gold.agg_company_daily\n",
+          " GROUP BY company_name\n",
+          " ORDER BY mobile_share_pct DESC, company_name"
+        ]
+      },
+      {
+        "id": "05a63b075d34701f3827256a3d1bff5b",
+        "question": [
+          "Did the loaded hours match Wikimedia's own published totals?"
+        ],
+        "sql": [
+          "SELECT count(*)                AS hours_compared,\n",
+          "       sum(domains)            AS domain_hours_compared,\n",
+          "       sum(mismatched_domains) AS domains_off,\n",
+          "       sum(our_total_views)    AS our_views,\n",
+          "       sum(their_total_views)  AS wikimedia_views\n",
+          "  FROM ${resources.schemas.gold.catalog_name}.ops.reconciliation"
+        ]
+      }
+    ]
+  }
+}

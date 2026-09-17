@@ -60,7 +60,8 @@ wikiflow-lakehouse/
 │  ├─ pipelines/pageviews/                                      one file per table
 │  │  ├─ raw/ · silver/                                  M2-S1
 │  │  └─ gold/ · ops/                                    M2-S2
-│  └─ dashboards/attention.lvdash.json                   M4-S1
+│  ├─ dashboards/attention.lvdash.json                   M4-S1
+│  └─ genie/attention.geniespace.json                    M4-S2
 ├─ seeds/companies.csv                                   M1-S3
 ├─ tests/
 │  ├─ unit/                                              M0-S1  grows every story

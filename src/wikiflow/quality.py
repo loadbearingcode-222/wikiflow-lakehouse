@@ -243,6 +243,17 @@ def results_table(catalog: str) -> str:
     return f"{catalog}.ops.quality_results"
 
 
+def ensure_results_table(spark: Any, catalog: str) -> None:
+    """Created by `plan_hours` too, not only by the first quality run: the dashboard and the
+    alerts read this table, and a catalog where the checks had not yet run left the dashboard's
+    quality panel failing TABLE_OR_VIEW_NOT_FOUND (dev, M4-S1)."""
+    spark.sql(
+        f"CREATE TABLE IF NOT EXISTS {results_table(catalog)} ({RESULTS_SCHEMA}) "
+        "COMMENT 'One row per quality check per run (append-only); the alerts read the newest' "
+        "TBLPROPERTIES ('delta.appendOnly' = 'true')"
+    )
+
+
 def write_results(
     spark: Any,
     catalog: str,
@@ -253,11 +264,7 @@ def write_results(
     as_of: datetime,
 ) -> None:
     table = results_table(catalog)
-    spark.sql(
-        f"CREATE TABLE IF NOT EXISTS {table} ({RESULTS_SCHEMA}) "
-        "COMMENT 'One row per quality check per run (append-only); the alerts read the newest' "
-        "TBLPROPERTIES ('delta.appendOnly' = 'true')"
-    )
+    ensure_results_table(spark, catalog)
     rows = [
         (job_run_id, checked_at, as_of, r.check, r.status, r.detail, r.metric, r.threshold)
         for r in results
