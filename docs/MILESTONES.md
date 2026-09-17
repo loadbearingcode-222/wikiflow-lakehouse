@@ -68,6 +68,7 @@ wikiflow-lakehouse/
 │  └─ integration/                                       M1-S1  Databricks Connect → sandbox
 ├─ scripts/
 │  ├─ bootstrap/                                         M0-S2  one-time: catalogs + binds
+│  ├─ cross_platform_parity.py                           M2-S4  wikiflow's DuckDB marts vs these, EXCEPT ALL
 │  └─ benchmark_extraction.py                            M5-S2
 ├─ docs/
 │  ├─ MILESTONES.md                                      M0-S1  this file
