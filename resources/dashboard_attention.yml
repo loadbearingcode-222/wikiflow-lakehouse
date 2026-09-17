@@ -1,0 +1,13 @@
+# attention - the AI/BI dashboard that replaces wikiflow's Streamlit app (M4-S1).
+#
+# Declared here, never drawn in the UI: the .lvdash.json IS the dashboard, and `bundle deploy`
+# overwrites anything added in the browser. Queries name tables as `gold.<table>` / `ops.<table>`
+# and `dataset_catalog` supplies the catalog per target, so one file serves sandbox, dev and prod.
+# The warehouse is looked up by name: Free Edition has exactly one.
+resources:
+  dashboards:
+    attention:
+      display_name: wikiflow - attention on Wikipedia (${var.catalog})
+      file_path: ../src/dashboards/attention.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
