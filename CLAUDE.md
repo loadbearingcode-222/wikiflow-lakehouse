@@ -51,6 +51,7 @@ none of the ceremony.
 | uv | 0.11.25 | 2026-09-17 |
 | Python (project) | 3.12 | 2026-09-17 |
 | Java (local PySpark) | 17.0.12 | 2026-09-17 |
+| Serverless environment 5 → Python / Spark on the task | 3.12.3 / 4.2.0 | 2026-09-17 (hello run) |
 
 ## Commands
 
@@ -67,8 +68,9 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    Windows paths before the CLI sees them. Prefix with `MSYS_NO_PATHCONV=1`.
 2. **Piping CLI JSON into Python on Windows decodes it as cp1252**, which turns non-ASCII into
    mojibake. Use `subprocess.run(..., encoding="utf-8")`, never a pipe into stdin.
-3. **A bundle cannot create a catalog on Default Storage.** Create it with SQL, then
-   `databricks bundle deployment bind`. Schemas, jobs and pipelines deploy normally.
+3. **A bundle cannot create a catalog on Default Storage.** The catalogs are created once with
+   SQL by `scripts/bootstrap/create_catalogs.py` and are not declared in the bundle, so nothing
+   needs binding. Schemas, volumes, jobs and pipelines deploy normally.
 4. **`mode: development` prefixes Unity Catalog names too** (`bronze` → `dev_<user>_bronze`), and
    `presets: name_prefix: ""` does not switch it off. Non-prod targets spell out their presets.
    Ten-second check: `databricks bundle validate -t dev -o json` → `.resources.schemas`.
@@ -78,3 +80,7 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    Pin `environment_version` on every Python task.
 7. **One active pipeline per type is shared with NOAA.** Never let this project's pipeline update
    overlap NOAA's.
+8. **Free Edition can pause ALL compute for the account without warning.** The warehouse answers
+   "Cannot create the resource, please try again later" and `jobs submit` answers "Triggering
+   new runs for organization ... is currently disabled temporarily" (2026-09-17, cleared within
+   hours). It is not a code error: stop, and retry later.
