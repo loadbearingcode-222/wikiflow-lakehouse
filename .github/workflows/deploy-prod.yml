@@ -1,0 +1,62 @@
+# Prod deploys only from a PUBLISHED release. Publishing it is the approval.
+#
+# The repo is private on GitHub's free plan, where protected environments are not available,
+# so the human gate is the release itself: Claude drafts it at milestone close, the user
+# publishes it. workflow_dispatch exists for rollback only, and it refuses anything that is not
+# an existing, published v<major>.<minor>.<patch> release.
+name: deploy-prod
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to (re)deploy, e.g. v0.1.0 - used for rollback
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: The tag is a published release
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=deploy-prod::TAG-FORMAT: '$TAG' is not v<major>.<minor>.<patch>"; exit 1
+          fi
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft) || {
+            echo "::error title=deploy-prod::NO-RELEASE: no release named $TAG"; exit 1; }
+          if [ "$draft" != "false" ]; then
+            echo "::error title=deploy-prod::RELEASE-NOT-PUBLISHED: $TAG is still a draft"; exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: The code being deployed says it is this version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -1)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error title=deploy-prod::VERSION-MISMATCH: pyproject.toml says $version, release is $TAG"; exit 1
+          fi
+      - uses: astral-sh/setup-uv@v5
+      - uses: databricks/setup-cli@main
+        with:
+          version: 1.16.1
+      - name: databricks bundle deploy -t prod
+        run: databricks bundle deploy -t prod
+      - name: Smoke - the deployed hello job runs against wikiflow
+        run: databricks bundle run hello -t prod

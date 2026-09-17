@@ -1,0 +1,37 @@
+# Every merge to main deploys dev, then proves it with a run.
+#
+# A push to main IS a merge here: nothing else reaches main (story PRs only; the pre-push hook
+# refuses direct pushes). No pull_request trigger: an unmerged branch must never overwrite dev.
+# No workflow_dispatch: a dispatch can run on any branch, which is the same hole another way.
+name: deploy-dev
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Merges queue and never race; a deploy already running is never cancelled halfway.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5  # the bundle builds the wheel with `uv build`
+      - uses: databricks/setup-cli@main
+        with:
+          version: 1.16.1
+      - name: databricks bundle deploy -t dev
+        run: databricks bundle deploy -t dev
+      - name: Smoke - the deployed hello job runs against wikiflow_dev
+        run: databricks bundle run hello -t dev
