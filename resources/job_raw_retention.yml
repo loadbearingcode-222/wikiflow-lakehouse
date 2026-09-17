@@ -1,0 +1,48 @@
+# raw_retention - delete raw files older than 7 days: plan, record, then apply exactly the plan (M3-S2).
+#
+# Dry run unless var.raw_retention_mode is `apply`, which only prod sets (databricks.yml). A refused
+# plan is a finding, not a transient error, so neither task retries (CLAUDE.md trap 16).
+resources:
+  jobs:
+    raw_retention:
+      name: wikiflow_raw_retention_${bundle.target}
+      description: >-
+        Daily - raw volume partitions dated more than 7 days back are planned into
+        ops.retention_manifest, then deleted exactly as planned; refuses to expire everything (M3-S2).
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"
+        timezone_id: UTC
+      parameters:
+        - name: retention_days
+          default: "7"
+        - name: mode
+          default: ${var.raw_retention_mode}
+      tasks:
+        - task_key: plan_retention
+          environment_key: default
+          max_retries: 0
+          disable_auto_optimization: true
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: raw_retention
+            parameters: ["--catalog", "${var.catalog}", "--step", "plan", "--job-run-id", "{{job.run_id}}",
+                         "--retention-days", "{{job.parameters.retention_days}}", "--mode", "{{job.parameters.mode}}"]
+        - task_key: apply_retention
+          depends_on:
+            - task_key: plan_retention
+          environment_key: default
+          max_retries: 0
+          disable_auto_optimization: true
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: raw_retention
+            parameters: ["--catalog", "${var.catalog}", "--step", "apply", "--job-run-id", "{{job.run_id}}",
+                         "--retention-days", "{{job.parameters.retention_days}}", "--mode", "{{job.parameters.mode}}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl
