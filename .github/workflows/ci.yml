@@ -1,0 +1,56 @@
+# Every pull request and every push to main.
+#
+# story-lint and layout-lint enforce the two things this repo is judged by first: the layout
+# declared in docs/MILESTONES.md, and PRs that arrive as the plan's stories, in order.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  story-lint:
+    name: story-lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The PR is the next story in docs/MILESTONES.md
+        # Branch and title reach the script through env, never interpolated into the shell.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 .github/scripts/story_lint.py --branch "$HEAD_REF" --title "$PR_TITLE" --main-ref origin/main
+
+  layout-lint:
+    name: layout-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every tracked path is declared in docs/MILESTONES.md
+        run: python3 .github/scripts/layout_lint.py
+
+  quality:
+    name: lint / types / unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+      - run: uv run ruff check --output-format=github .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest tests/unit

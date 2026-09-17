@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Refuse a direct push to main.
+#
+# This repo is private on GitHub's free plan, where rulesets and branch protection are not
+# enforced, so this hook is the guard. Every change after the initial commit reaches main
+# as a numbered story PR (docs/MILESTONES.md).
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Deliberate override:     WIKIFLOW_ALLOW_MAIN_PUSH=1 git push
+set -euo pipefail
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    if [ "${WIKIFLOW_ALLOW_MAIN_PUSH:-0}" = "1" ]; then
+      echo "pre-push: WIKIFLOW_ALLOW_MAIN_PUSH=1 - allowing a direct push to main." >&2
+      exit 0
+    fi
+    cat >&2 <<'MSG'
+
+  pre-push: refusing a direct push to main.
+
+  Every change reaches main as a story PR, in plan order (docs/MILESTONES.md):
+
+      git switch -c feat/m<M>-s<S>-<slug>
+      git push -u origin HEAD
+      gh pr create --title "M<M>-S<S>: <what it delivers>"
+
+MSG
+    exit 1
+  fi
+done
+exit 0

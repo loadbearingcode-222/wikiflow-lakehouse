@@ -1,0 +1,55 @@
+[project]
+name = "wikiflow-lakehouse"
+version = "0.0.0"
+description = "The wikiflow hourly Wikimedia pageviews pipeline, rebuilt on Databricks"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+]
+
+[tool.uv]
+# No importable package until M0-S2 adds src/wikiflow/.
+package = false
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", ".github/scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "B",         # bugbear
+    "UP",        # pyupgrade
+    "SIM",       # simplify
+    "PTH",       # pathlib only: the repo path contains a space
+    "RUF",
+]
+ignore = ["E501"]  # the formatter owns line length
+
+[tool.ruff.lint.isort]
+known-first-party = ["story_lint", "layout_lint"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+files = [".github/scripts", "tests"]
+mypy_path = ".github/scripts"
+strict = true
+warn_unreachable = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
