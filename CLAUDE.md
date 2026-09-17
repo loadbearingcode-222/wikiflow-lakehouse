@@ -51,7 +51,8 @@ none of the ceremony.
   reproduce earlier runs, then refreshes the pageviews pipeline (whose `ops.reconciliation` fails
   the update on a one-view difference). Dev's filter was published once by hand (`company_pages_refresh -t dev`);
   prod's is refreshed by deploy-prod at every release.
-- `system.billing.usage` lags ~3 days here (2026-09-17: newest row ended 2026-09-14 15:00).
+- `system.billing.usage` lagged ~3 days on 2026-09-17 morning, same-day by that evening (newest row
+  ended 14:10 UTC). The Cost page counts only hours ingested before billing's newest record.
 - Databricks Connect 19.1 from the laptop to serverless works (session in ~7 s).
 - Local: Windows 11, Git Bash. The repo path contains a space (`cloud platform`).
 - GitHub: `loadbearingcode-222/wikiflow-lakehouse`. Author `loadbearingcode-222` (noreply).
