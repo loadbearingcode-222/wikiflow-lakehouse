@@ -39,9 +39,14 @@ none of the ceremony.
   - 1 active pipeline per type;
   - one SQL warehouse, 2X-Small, `Serverless Starter Warehouse` (look it up by name, never by id);
   - a quota overrun silently stops compute for the day;
-  - outbound internet restricted to "trusted domains" (measured in M0-S4).
+  - outbound internet restricted to "trusted domains". MEASURED 2026-09-17 (ADR 0010):
+    `dumps.wikimedia.org`, `www.wikidata.org` and `en.wikipedia.org` all answer HTTP 200
+    from serverless job compute.
 - Catalogs: `wikiflow_sbx` (target `sandbox`, the laptop), `wikiflow_dev` (`dev`, every merge
   to `main`), `wikiflow` (`prod`, a published release). Only prod runs schedules.
+- Prod ingests every 3 hours (ADR 0010). One hour costs ~75 s of serverless task time.
+- `system.billing.usage` lags ~3 days here (2026-09-17: newest row ended 2026-09-14 15:00).
+- Databricks Connect 19.1 from the laptop to serverless works (session in ~7 s).
 - Local: Windows 11, Git Bash. The repo path contains a space (`cloud platform`).
 - GitHub: `loadbearingcode-222/wikiflow-lakehouse`. Author `loadbearingcode-222` (noreply).
 
@@ -65,7 +70,9 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
 ## Known traps (silent ones first)
 
 1. **Git Bash rewrites arguments that start with `/`** (`/Volumes/...`, `/Workspace/...`) into
-   Windows paths before the CLI sees them. Prefix with `MSYS_NO_PATHCONV=1`.
+   Windows paths before the CLI sees them. Prefix with `MSYS_NO_PATHCONV=1` - but then a LOCAL
+   `/tmp/x` reaches the Windows CLI unconverted and "does not exist" (and `--json @/tmp/x`
+   fails the same way). Pass local files as `$(cygpath -w /tmp/x)`.
 2. **Piping CLI JSON into Python on Windows decodes it as cp1252**, which turns non-ASCII into
    mojibake. Use `subprocess.run(..., encoding="utf-8")`, never a pipe into stdin.
 3. **A bundle cannot create a catalog on Default Storage.** The catalogs are created once with
