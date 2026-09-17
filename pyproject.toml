@@ -5,6 +5,7 @@ description = "The wikiflow hourly Wikimedia pageviews pipeline, rebuilt on Data
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "httpx>=0.27",
     "pydantic>=2.9",
 ]
 
@@ -24,6 +25,7 @@ connect = [
 # Entry points for python_wheel_task (resources/job_*.yml). Each maps to src/wikiflow/tasks/.
 hello = "wikiflow.tasks.hello:main"
 feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
+land_hour = "wikiflow.tasks.land_hour:main"
 
 [build-system]
 requires = ["hatchling"]
