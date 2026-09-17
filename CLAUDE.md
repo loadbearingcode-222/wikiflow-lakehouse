@@ -134,3 +134,8 @@ Operations (alerts, failures, reprocess, backfill, releases): `docs/RUNBOOK.md`.
 17. **Alerts v2 have no run-now.** To watch one fire, set its schedule to `0 * * * * ?` UNPAUSED
    (`databricks alerts-v2 update-alert <id> schedule --json ...`) and let it tick;
    `bundle deploy` puts the committed schedule back.
+18. **A Genie space's file cannot hold `${var.catalog}`** (`invalid dependency "${var.catalog}"`,
+   CLI 1.16.1, as NOAA measured on 1.14.1): unlike a dashboard it has no `dataset_catalog`, and a
+   variable inside an inlined file is not a node. Reference a resource instead:
+   `${resources.schemas.gold.catalog_name}`. Read a space back with
+   `databricks api get "/api/2.0/genie/spaces/<id>?include_serialized_space=true"`.
