@@ -23,7 +23,8 @@ concurrency:
 jobs:
   story-lint:
     name: story-lint
-    if: github.event_name == 'pull_request'
+    # Only open PRs: editing a merged PR fires `edited` too, and would report ALREADY-MERGED.
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
