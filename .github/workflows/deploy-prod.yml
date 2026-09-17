@@ -26,7 +26,7 @@ jobs:
   deploy:
     name: deploy prod
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -60,3 +60,7 @@ jobs:
         run: databricks bundle deploy -t prod
       - name: Smoke - the deployed hello job runs against wikiflow
         run: databricks bundle run hello -t prod
+      # ingest_hours refuses to plan without a published filter, and the daily refresh may be
+      # up to a day away. Refreshing at release is also shrink-guarded, like any refresh.
+      - name: The company filter is published before the first scheduled ingest
+        run: databricks bundle run company_pages_refresh -t prod

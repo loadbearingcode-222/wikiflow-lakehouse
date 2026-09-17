@@ -108,6 +108,13 @@ class HourGrains:
     def company_share(self) -> float:
         return self.company_views / self.total_views if self.total_views else 0.0
 
+    @property
+    def domain_views(self) -> dict[str, int]:
+        """Views per domain code: the side of the hour that reconciles with projectviews."""
+        names = columns(BRONZE_CONTRACTS["domain_totals"])
+        code, views = names.index("domain_code"), names.index("views")
+        return {row[code]: row[views] for row in self.domain_rows}
+
 
 def build_grains(
     groups: Iterable[LineGroup],

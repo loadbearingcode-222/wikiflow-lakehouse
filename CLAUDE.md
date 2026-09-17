@@ -44,7 +44,12 @@ none of the ceremony.
     from serverless job compute.
 - Catalogs: `wikiflow_sbx` (target `sandbox`, the laptop), `wikiflow_dev` (`dev`, every merge
   to `main`), `wikiflow` (`prod`, a published release). Only prod runs schedules.
-- Prod ingests every 3 hours (ADR 0010). One hour costs ~75 s of serverless task time.
+- Prod ingests every 3 hours (ADR 0010): `ingest_hours` = `plan_hours` → `for_each` (2 at a
+  time) `ingest_hour` → `verify_run`. One hour is ~30-90 s of task time; a 4-hour run took
+  7 min 18 s end to end, and a run with nothing to plan 42 s (sandbox, 2026-09-17).
+- Each merge's dev smoke re-ingests 2026-09-15T10..11 and fails unless they reconcile and
+  reproduce earlier runs. Dev's filter was published once by hand (`company_pages_refresh -t dev`);
+  prod's is refreshed by deploy-prod at every release.
 - `system.billing.usage` lags ~3 days here (2026-09-17: newest row ended 2026-09-14 15:00).
 - Databricks Connect 19.1 from the laptop to serverless works (session in ~7 s).
 - Local: Windows 11, Git Bash. The repo path contains a space (`cloud platform`).
@@ -100,3 +105,8 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
 10. **`SHOW TBLPROPERTIES` redacts some values**: the `source_url_valid` constraint reads back as
    `*********(redacted)`. Compare such constraints by name (`constraints_drifted`), or they
    look changed on every run and get re-applied, one commit each.
+11. **Parallel `for_each` iterations must not run DDL.** Two iterations that both found the
+   audit table missing a column both ran ALTER TABLE; one failed `DELTA_METADATA_CHANGED`
+   (sandbox run 744903363204838). Tables are created and migrated in `plan_hours`, before the
+   fan-out. Concurrent `REPLACE WHERE` writes of DIFFERENT hours to the same clustered table
+   did not conflict (4 hours, 2 at a time, WriteSerializable).

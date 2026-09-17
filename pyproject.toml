@@ -1,6 +1,6 @@
 [project]
 name = "wikiflow"
-version = "0.1.0"
+version = "0.2.0"
 description = "The wikiflow hourly Wikimedia pageviews pipeline, rebuilt on Databricks"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -26,6 +26,8 @@ connect = [
 hello = "wikiflow.tasks.hello:main"
 feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
 ingest_hour = "wikiflow.tasks.ingest_hour:main"
+plan_hours = "wikiflow.tasks.plan_hours:main"
+verify_run = "wikiflow.tasks.verify_run:main"
 company_pages_refresh = "wikiflow.tasks.company_pages_refresh:main"
 
 [build-system]

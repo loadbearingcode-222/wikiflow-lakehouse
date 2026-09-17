@@ -1,35 +1,94 @@
-# ingest_hours - grows story by story: M1-S2 landed one hour, M1-S4 ingests it into bronze with
-# an audit row per attempt, M1-S5 plans which hours are missing and fans out over them.
+# ingest_hours - grew story by story: M1-S2 landed one hour, M1-S4 ingested it into bronze with an
+# audit row per attempt, M1-S5 plans the missing hours, fans out over them and verifies the run.
+#
+#   plan_hours  ->  ingest_each_hour (for_each, 2 at a time)  ->  verify_run
+#
+# Concurrency 2 and max_concurrent_runs 1 together cap downloads at 2 connections: the dump
+# server allows 3 per client IP (wikiflow once hit 429s by counting runs instead of downloads).
 resources:
   jobs:
     ingest_hours:
       name: wikiflow_ingest_hours_${bundle.target}
-      description: Ingest one hour of Wikimedia pageviews - land verified, extract both bronze grains, audit (M1-S4).
+      description: >-
+        Every 3 hours (prod) - plan the published hours bronze lacks, ingest each (land verified,
+        extract both grains, audit), then verify every hour reconciled with projectviews (M1-S5).
       max_concurrent_runs: 1
+      timeout_seconds: 14400
+      schedule:
+        # ADR 0010: every 3 hours; at :20, since an hour is published ~1-4 h after it ends.
+        quartz_cron_expression: "0 20 0/3 * * ?"
+        timezone_id: UTC
       parameters:
-        - name: hour
-          default: "2026-09-15T11"
+        - name: start
+          default: "2026-09-14T00"
+        - name: end
+          default: ""  # the last hour that has ended
+        - name: max_hours
+          default: "24"
+        - name: replace_present
+          default: "false"
       tasks:
-        - task_key: ingest_hour
+        - task_key: plan_hours
           environment_key: default
-          max_retries: 1
-          min_retry_interval_millis: 300000  # a Retry-After longer than download.py will wait
           python_wheel_task:
             package_name: wikiflow
-            entry_point: ingest_hour
+            entry_point: plan_hours
             parameters:
               - "--catalog"
               - "${var.catalog}"
-              - "--hour"
-              - "{{job.parameters.hour}}"
+              - "--start"
+              - "{{job.parameters.start}}"
+              - "--end"
+              - "{{job.parameters.end}}"
+              - "--max-hours"
+              - "{{job.parameters.max_hours}}"
+              - "--replace-present"
+              - "{{job.parameters.replace_present}}"
+
+        - task_key: ingest_each_hour
+          depends_on:
+            - task_key: plan_hours
+          for_each_task:
+            inputs: "{{tasks.plan_hours.values.hours}}"
+            concurrency: 2
+            task:
+              task_key: ingest_hour
+              environment_key: default
+              timeout_seconds: 1800
+              max_retries: 1
+              min_retry_interval_millis: 300000  # a Retry-After longer than download.py will wait
+              python_wheel_task:
+                package_name: wikiflow
+                entry_point: ingest_hour
+                parameters:
+                  - "--catalog"
+                  - "${var.catalog}"
+                  - "--hour"
+                  - "{{input}}"
+                  - "--job-run-id"
+                  - "{{job.run_id}}"
+                  - "--task-run-id"
+                  - "{{task.run_id}}"
+                  - "--task-key"
+                  - "{{task.name}}"
+                  - "--attempt"
+                  - "{{task.execution_count}}"
+
+        - task_key: verify_run
+          depends_on:
+            - task_key: ingest_each_hour
+          environment_key: default
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: verify_run
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
               - "--job-run-id"
               - "{{job.run_id}}"
-              - "--task-run-id"
-              - "{{task.run_id}}"
-              - "--task-key"
-              - "{{task.name}}"
-              - "--attempt"
-              - "{{task.execution_count}}"
+              - "--hours"
+              - "{{tasks.plan_hours.values.hours}}"
+
       environments:
         - environment_key: default
           spec:

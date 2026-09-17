@@ -21,7 +21,7 @@ jobs:
   deploy:
     name: deploy dev
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -35,3 +35,10 @@ jobs:
         run: databricks bundle deploy -t dev
       - name: Smoke - the deployed hello job runs against wikiflow_dev
         run: databricks bundle run hello -t dev
+      # Re-ingests two fixed hours on every merge. The job's own verify_run task fails the run
+      # unless both hours reconcile with projectviews AND reproduce every earlier merge's totals
+      # for the same files - so each merge re-proves idempotency, not just that the code runs.
+      - name: Smoke - ingest_hours re-ingests 2026-09-15T10..11 and verifies them
+        run: >-
+          databricks bundle run ingest_hours -t dev
+          --params start=2026-09-15T10,end=2026-09-15T11,max_hours=2,replace_present=true
