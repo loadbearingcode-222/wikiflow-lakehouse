@@ -33,6 +33,7 @@ from wikiflow.plan_hours import (
     plan,
     present_hours,
 )
+from wikiflow.quality import ensure_results_table
 from wikiflow.reference import load_current
 
 
@@ -80,6 +81,7 @@ def main(argv: list[str] | None = None) -> None:
         )
     ensure_bronze_tables(spark, args.catalog)
     ensure_audit_table(spark, args.catalog)
+    ensure_results_table(spark, args.catalog)
 
     available = (
         reprocess.raw_hours(Path(f"/Volumes/{args.catalog}/raw/dumps"))
