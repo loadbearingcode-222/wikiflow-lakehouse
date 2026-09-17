@@ -30,3 +30,10 @@ keeps **all 379 tracked-company rows** of that hour plus 4,000 sampled filler ro
 | company views | 5,138 |
 | distinct domain codes | 320 |
 | total views | 15,255 |
+
+## `company_pages.csv`
+
+The company filter the sample above was extracted with in wikiflow: 2,238 sitelink rows, from
+before redirects were added to the filter (its ADR 0007), which is why it has no `match_type`
+column. With it, `test_extract.py` reproduces the table above exactly, and the M1-S4 integration
+test checks the Spark scan of the sample against the same numbers.

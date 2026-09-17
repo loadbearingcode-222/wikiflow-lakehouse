@@ -25,7 +25,7 @@ connect = [
 # Entry points for python_wheel_task (resources/job_*.yml). Each maps to src/wikiflow/tasks/.
 hello = "wikiflow.tasks.hello:main"
 feasibility_spike = "wikiflow.tasks.feasibility_spike:main"
-land_hour = "wikiflow.tasks.land_hour:main"
+ingest_hour = "wikiflow.tasks.ingest_hour:main"
 company_pages_refresh = "wikiflow.tasks.company_pages_refresh:main"
 
 [build-system]
@@ -67,7 +67,7 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 # Spark is provided by the serverless runtime, not installed locally.
-module = ["pyspark.*", "databricks.connect.*"]
+module = ["pyspark.*", "databricks.connect.*", "databricks.sdk.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

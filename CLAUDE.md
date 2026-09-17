@@ -63,6 +63,8 @@ none of the ceremony.
 ```bash
 uv sync --group dev                      # dev environment
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
+uv run --group connect pytest tests/integration -s   # real Spark on serverless, writes wikiflow_sbx only
+databricks bundle deploy -t sandbox && databricks bundle run ingest_hours -t sandbox --params hour=2026-09-15T11
 python .github/scripts/layout_lint.py    # is every tracked path declared?
 python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --title "M0-S1: ..."
 ```
@@ -91,3 +93,10 @@ python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --t
    "Cannot create the resource, please try again later" and `jobs submit` answers "Triggering
    new runs for organization ... is currently disabled temporarily" (2026-09-17, cleared within
    hours). It is not a code error: stop, and retry later.
+9. **Serverless Spark runs with ANSI mode on, and cannot cache.** One bad value makes `CAST` or
+   `p[2]` fail the whole scan: use `try_cast` and `get(p, 2)`. `df.cache()`, `persist()` and
+   `CACHE TABLE` answer `NOT_SUPPORTED_WITH_SERVERLESS`, so each action re-reads its source;
+   collect a small aggregate once instead (`extract_spark.py`). Measured 2026-09-17.
+10. **`SHOW TBLPROPERTIES` redacts some values**: the `source_url_valid` constraint reads back as
+   `*********(redacted)`. Compare such constraints by name (`constraints_drifted`), or they
+   look changed on every run and get re-applied, one commit each.
