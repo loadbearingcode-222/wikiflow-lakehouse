@@ -1,0 +1,11 @@
+# LF everywhere: CI, Databricks and the bundle all run on Linux.
+* text=auto eol=lf
+
+# PowerShell stays CRLF: Windows PowerShell 5.1 mishandles LF in here-strings.
+*.ps1 text eol=crlf
+
+# Never touch these.
+*.gz        binary
+*.parquet   binary
+*.png       binary
+*.jpg       binary

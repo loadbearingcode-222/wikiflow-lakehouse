@@ -1,0 +1,40 @@
+# --- secrets / local env ---
+.env
+.databrickscfg
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# --- databricks bundle state (per machine) ---
+.databricks/
+
+# --- data pulled locally for tests or spikes ---
+data/
+scratch/
+*.duckdb
+*.duckdb.wal
+spark-warehouse/
+metastore_db/
+derby.log
+
+# --- never in this repo (docs/MILESTONES.md, "Never in the repo") ---
+HANDOFF.md
+ledgers/
+automation/
+.idea/
+.claude/
+*.transcript*
+
+# --- os ---
+.DS_Store
+Thumbs.db
