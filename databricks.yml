@@ -40,6 +40,10 @@ variables:
       Serverless environment for every Python task. 5 is GA (Python 3.12.3) and proven on this
       workspace; 6 was two weeks old when this was pinned (2026-09-17).
     default: "5"
+  raw_retention_mode:
+    description: >-
+      `dry_run` plans and records raw retention without deleting anything; only prod sets `apply`.
+    default: dry_run
   warehouse_id:
     description: The one SQL warehouse Free Edition allows, looked up by name, never pinned by id.
     lookup:
@@ -80,6 +84,7 @@ targets:
         env: prod
     variables:
       catalog: wikiflow
+      raw_retention_mode: apply
     # Prod holds the only copy of what has been ingested: deleting a schema or the raw volume
     # by editing a file must fail loudly. Sandbox and dev stay freely destroyable.
     resources:
