@@ -70,10 +70,13 @@ none of the ceremony.
 uv sync --group dev                      # dev environment
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest tests/unit
 uv run --group connect pytest tests/integration -s   # real Spark on serverless, writes wikiflow_sbx only
-databricks bundle deploy -t sandbox && databricks bundle run ingest_hours -t sandbox --params hour=2026-09-15T11
+databricks bundle deploy -t sandbox && databricks bundle run ingest_hours -t sandbox --params start=2026-09-15T11,end=2026-09-15T11
+databricks bundle run reprocess -t sandbox --params start=2026-09-16T12,end=2026-09-16T12   # from raw, no download
 python .github/scripts/layout_lint.py    # is every tracked path declared?
 python .github/scripts/story_lint.py --branch "$(git branch --show-current)" --title "M0-S1: ..."
 ```
+
+Operations (alerts, failures, reprocess, backfill, releases): `docs/RUNBOOK.md`.
 
 ## Known traps (silent ones first)
 
