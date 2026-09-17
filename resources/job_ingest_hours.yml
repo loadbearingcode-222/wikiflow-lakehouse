@@ -1,0 +1,26 @@
+# ingest_hours - grows story by story: M1-S2 lands one hour, M1-S4 extracts it,
+# M1-S5 plans which hours are missing and fans out over them.
+resources:
+  jobs:
+    ingest_hours:
+      name: wikiflow_ingest_hours_${bundle.target}
+      description: Land one hour of Wikimedia pageviews into the raw volume, verified (M1-S2).
+      max_concurrent_runs: 1
+      parameters:
+        - name: hour
+          default: "2026-09-15T11"
+      tasks:
+        - task_key: land_hour
+          environment_key: default
+          max_retries: 1
+          min_retry_interval_millis: 300000  # a Retry-After longer than download.py will wait
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: land_hour
+            parameters: ["--catalog", "${var.catalog}", "--hour", "{{job.parameters.hour}}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl
