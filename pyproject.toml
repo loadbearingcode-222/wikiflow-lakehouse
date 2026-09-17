@@ -72,6 +72,13 @@ warn_unreachable = true
 module = ["pyspark.*", "databricks.connect.*", "databricks.sdk.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# Pipeline source files run inside Lakeflow, whose pyspark.pipelines has the expectation
+# decorators. The databricks-connect client's copy does not, so a laptop with the connect
+# group installed would flag them; CI, without pyspark at all, would not.
+module = ["projectviews"]
+disable_error_code = ["attr-defined", "untyped-decorator"]
+
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 minversion = "8.0"

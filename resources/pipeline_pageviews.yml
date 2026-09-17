@@ -1,0 +1,22 @@
+# pageviews - the Lakeflow pipeline that replaces wikiflow's dbt project.
+#
+#   raw.projectviews (Auto Loader, M2-S1)       the oracle
+#   silver.stg_company_pageviews, stg_domain_totals (materialized views, M2-S1)
+#   gold marts + ops.reconciliation (M2-S2)
+#
+# Every table is named in two parts and takes its catalog from `catalog:` below, never from
+# `configuration`: a job that starts this pipeline replaces the configuration (CLAUDE.md trap 5).
+# Free Edition allows one active pipeline per type, shared with NOAA's `medallion` (trap 7).
+resources:
+  pipelines:
+    pageviews:
+      name: wikiflow_pageviews_${bundle.target}
+      catalog: ${var.catalog}
+      schema: silver
+      serverless: true
+      channel: CURRENT
+      continuous: false
+      root_path: ../src/pipelines/pageviews
+      libraries:
+        - glob:
+            include: ../src/pipelines/pageviews/**
