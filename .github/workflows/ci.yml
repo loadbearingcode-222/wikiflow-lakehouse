@@ -2,6 +2,9 @@
 #
 # story-lint and layout-lint enforce the two things this repo is judged by first: the layout
 # declared in docs/MILESTONES.md, and PRs that arrive as the plan's stories, in order.
+#
+# `edited` re-runs story-lint when a PR title changes. Every other job skips edits: a PR body
+# update is not a code change, and re-running bundle validate for it only burns minutes.
 name: ci
 
 on:
@@ -35,6 +38,7 @@ jobs:
 
   layout-lint:
     name: layout-lint
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +47,7 @@ jobs:
 
   quality:
     name: lint / types / unit tests
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +62,7 @@ jobs:
 
   bundle-validate:
     name: bundle validate
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
