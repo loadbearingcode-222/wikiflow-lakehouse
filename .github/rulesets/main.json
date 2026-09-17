@@ -24,7 +24,8 @@
         "required_status_checks": [
           { "context": "story-lint" },
           { "context": "layout-lint" },
-          { "context": "lint / types / unit tests" }
+          { "context": "lint / types / unit tests" },
+          { "context": "bundle validate" }
         ]
       }
     }

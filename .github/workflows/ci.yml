@@ -54,3 +54,23 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest tests/unit
+
+  bundle-validate:
+    name: bundle validate
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+        with:
+          version: 1.16.1
+      - name: Credentials are configured
+        run: |
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
+            echo "::error title=bundle-validate::BUNDLE-AUTH-MISSING: set repo secrets DATABRICKS_HOST and DATABRICKS_TOKEN"
+            exit 1
+          fi
+      - name: Validate sandbox, dev and prod
+        run: for target in sandbox dev prod; do databricks bundle validate -t "$target"; done
