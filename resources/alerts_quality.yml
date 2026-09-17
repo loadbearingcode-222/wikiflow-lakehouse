@@ -1,0 +1,133 @@
+# alerts_quality - one SQL alert per quality check (M3-S1), declared here, never built in the UI.
+#
+# Each reads the NEWEST row of its check in ops.quality_results and is TRIGGERED when that row
+# failed OR is more than 4 hours old. The second half matters: quality_checks runs every 3 hours,
+# and a check that stopped running would otherwise keep reporting its last pass forever. An empty
+# result (the checks never ran) is TRIGGERED for the same reason.
+#
+# Evaluated at :55, five minutes after quality_checks starts. Paused in sandbox and dev by the
+# target presets: an unpaused alert starts the one SQL warehouse Free Edition allows.
+# Alerts v2 have no run-now; the only way to see one fire is to let its schedule tick.
+resources:
+  alerts:
+    quality_gaps:
+      display_name: wikiflow quality - gaps (${var.catalog})
+      warehouse_id: ${var.warehouse_id}
+      custom_description: >-
+        An hour older than the freshness horizon is missing from bronze. Runbook: run ingest_hours
+        (it plans every published hour bronze lacks), or reprocess the hour from raw.
+      query_text: |-
+        SELECT CASE WHEN status = 'fail' OR checked_at < current_timestamp() - INTERVAL 4 HOURS
+                    THEN 1 ELSE 0 END AS failing,
+               status, detail, checked_at
+          FROM ${var.catalog}.ops.quality_results
+         WHERE check_name = 'gaps'
+         ORDER BY checked_at DESC
+         LIMIT 1
+      evaluation:
+        source:
+          name: failing
+        comparison_operator: GREATER_THAN
+        threshold:
+          value:
+            double_value: 0
+        empty_result_state: TRIGGERED
+        notification:
+          notify_on_ok: true
+          subscriptions:
+            - user_email: ${workspace.current_user.userName}
+      schedule:
+        quartz_cron_schedule: "0 55 0/3 * * ?"
+        timezone_id: UTC
+
+    quality_freshness:
+      display_name: wikiflow quality - freshness (${var.catalog})
+      warehouse_id: ${var.warehouse_id}
+      custom_description: >-
+        The newest hour in bronze is older than the threshold: ingestion stopped. Runbook: check
+        the latest ingest_hours runs, then Wikimedia's publication of the missing hours.
+      query_text: |-
+        SELECT CASE WHEN status = 'fail' OR checked_at < current_timestamp() - INTERVAL 4 HOURS
+                    THEN 1 ELSE 0 END AS failing,
+               status, detail, checked_at
+          FROM ${var.catalog}.ops.quality_results
+         WHERE check_name = 'freshness'
+         ORDER BY checked_at DESC
+         LIMIT 1
+      evaluation:
+        source:
+          name: failing
+        comparison_operator: GREATER_THAN
+        threshold:
+          value:
+            double_value: 0
+        empty_result_state: TRIGGERED
+        notification:
+          notify_on_ok: true
+          subscriptions:
+            - user_email: ${workspace.current_user.userName}
+      schedule:
+        quartz_cron_schedule: "0 55 0/3 * * ?"
+        timezone_id: UTC
+
+    quality_volume_anomaly:
+      display_name: wikiflow quality - volume anomaly (${var.catalog})
+      warehouse_id: ${var.warehouse_id}
+      custom_description: >-
+        An hour's total views deviate more than 4 sigma from the same hour on other days: a
+        truncated or half-written hour. Runbook: compare its audit row's line count with the
+        others, then reprocess it from raw.
+      query_text: |-
+        SELECT CASE WHEN status = 'fail' OR checked_at < current_timestamp() - INTERVAL 4 HOURS
+                    THEN 1 ELSE 0 END AS failing,
+               status, detail, checked_at
+          FROM ${var.catalog}.ops.quality_results
+         WHERE check_name = 'volume_anomaly'
+         ORDER BY checked_at DESC
+         LIMIT 1
+      evaluation:
+        source:
+          name: failing
+        comparison_operator: GREATER_THAN
+        threshold:
+          value:
+            double_value: 0
+        empty_result_state: TRIGGERED
+        notification:
+          notify_on_ok: true
+          subscriptions:
+            - user_email: ${workspace.current_user.userName}
+      schedule:
+        quartz_cron_schedule: "0 55 0/3 * * ?"
+        timezone_id: UTC
+
+    quality_mart_lag:
+      display_name: wikiflow quality - mart lag (${var.catalog})
+      warehouse_id: ${var.warehouse_id}
+      custom_description: >-
+        Bronze holds writes the gold fact has not carried for over 2 hours: the pageviews pipeline
+        stopped refreshing. Runbook: read the refresh_pageviews task of the latest ingest_hours run
+        and the pipeline's newest update.
+      query_text: |-
+        SELECT CASE WHEN status = 'fail' OR checked_at < current_timestamp() - INTERVAL 4 HOURS
+                    THEN 1 ELSE 0 END AS failing,
+               status, detail, checked_at
+          FROM ${var.catalog}.ops.quality_results
+         WHERE check_name = 'mart_lag'
+         ORDER BY checked_at DESC
+         LIMIT 1
+      evaluation:
+        source:
+          name: failing
+        comparison_operator: GREATER_THAN
+        threshold:
+          value:
+            double_value: 0
+        empty_result_state: TRIGGERED
+        notification:
+          notify_on_ok: true
+          subscriptions:
+            - user_email: ${workspace.current_user.userName}
+      schedule:
+        quartz_cron_schedule: "0 55 0/3 * * ?"
+        timezone_id: UTC

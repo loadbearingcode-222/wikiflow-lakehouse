@@ -1,0 +1,43 @@
+# quality_checks - is the warehouse there, recent, plausible and in the marts? (M3-S1)
+#
+# Four checks, one row each per run in ops.quality_results, one failure naming every failing
+# check. A separate job rather than a task of ingest_hours on purpose: "ingestion silently
+# stopped" is one of the things it exists to see, and a task of the stopped job would stop too.
+resources:
+  jobs:
+    quality_checks:
+      name: wikiflow_quality_checks_${bundle.target}
+      description: >-
+        Every 3 hours (prod), 30 minutes after ingest_hours starts - gaps, freshness, same-hour
+        volume anomalies, and marts lagging bronze; results in ops.quality_results (M3-S1).
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+      schedule:
+        quartz_cron_expression: "0 50 0/3 * * ?"
+        timezone_id: UTC
+      parameters:
+        - name: as_of
+          default: ""  # now; sandbox and dev pass a moment inside the window they hold
+        - name: mart_lag_minutes
+          default: "120"
+      tasks:
+        - task_key: quality_checks
+          environment_key: default
+          python_wheel_task:
+            package_name: wikiflow
+            entry_point: quality_checks
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--job-run-id"
+              - "{{job.run_id}}"
+              - "--as-of"
+              - "{{job.parameters.as_of}}"
+              - "--mart-lag-minutes"
+              - "{{job.parameters.mart_lag_minutes}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: ${var.environment_version}
+            dependencies:
+              - ../dist/*.whl
