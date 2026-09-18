@@ -169,6 +169,11 @@ Free Edition can pause all compute for the account (CLAUDE.md trap 8): jobs fail
 `Cannot create the resource`. It is not a code error and cleared within hours when it happened.
 Wait, then run `ingest_hours` once; it catches up every missed hour on its own.
 
+A pipeline update that fails with `RESOURCE_EXHAUSTED: You've hit the limit for serverless compute
+for free usage` is the other limit: too much serverless running at once (a Databricks Connect
+session and the warehouse were also up when it happened). The update retries itself and completed
+about 10 minutes later without help. Stop any Connect sessions or warehouse queries, and let it be.
+
 ### Rehearse an alert
 
 Alerts v2 have no run-now. Set the alert's schedule to `0 * * * * ?` UNPAUSED
