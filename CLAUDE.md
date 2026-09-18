@@ -103,7 +103,10 @@ Operations (alerts, failures, reprocess, backfill, releases): `docs/RUNBOOK.md`.
 8. **Free Edition can pause ALL compute for the account without warning.** The warehouse answers
    "Cannot create the resource, please try again later" and `jobs submit` answers "Triggering
    new runs for organization ... is currently disabled temporarily" (2026-09-17, cleared within
-   hours). It is not a code error: stop, and retry later.
+   hours). It is not a code error: stop, and retry later. It also caps CONCURRENT serverless use:
+   with a Connect session and the warehouse up, a job-started pipeline update failed 5 times with
+   `RESOURCE_EXHAUSTED ... limit for serverless compute for free usage`, then retried itself
+   through (M5-S3, ~10 min). Keep warehouse queries and Connect sessions off a pipeline refresh.
 9. **Serverless Spark runs with ANSI mode on, and cannot cache.** One bad value makes `CAST` or
    `p[2]` fail the whole scan: use `try_cast` and `get(p, 2)`. `df.cache()`, `persist()` and
    `CACHE TABLE` answer `NOT_SUPPORTED_WITH_SERVERLESS`, so each action re-reads its source;
