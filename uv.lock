@@ -866,7 +866,7 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-parity = [
+duckdb = [
     { name = "duckdb" },
 ]
 
@@ -884,7 +884,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.8" },
 ]
-parity = [{ name = "duckdb", specifier = ">=1.1" }]
+duckdb = [{ name = "duckdb", specifier = ">=1.1" }]
 
 [[package]]
 name = "zstandard"

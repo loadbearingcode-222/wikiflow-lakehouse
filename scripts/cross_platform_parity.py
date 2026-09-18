@@ -1,6 +1,6 @@
 """Same numbers on two platforms: wikiflow's DuckDB marts against this project's, EXCEPT ALL both ways.
 
-    uv run --group connect --group parity python scripts/cross_platform_parity.py \
+    uv run --group connect --group duckdb python scripts/cross_platform_parity.py \
         --duckdb "C:/Users/longt/data engineer/wikiflow/dbt/warehouse/wikiflow.duckdb"
 
 wikiflow's warehouse was built before its filter gained redirects (its ADR 0007), so its marts

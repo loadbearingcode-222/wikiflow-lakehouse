@@ -20,8 +20,9 @@ dev = [
 connect = [
     "databricks-connect>=19.1,<19.2",
 ]
-# scripts/cross_platform_parity.py reads wikiflow's DuckDB warehouse (M2-S4).
-parity = [
+# wikiflow's engine, for two scripts: cross_platform_parity.py reads its warehouse (M2-S4), and
+# benchmark_extraction.py runs the extraction on it (M5-S2, whose unit tests CI runs).
+duckdb = [
     "duckdb>=1.1",
 ]
 
@@ -48,7 +49,7 @@ packages = ["src/wikiflow"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", ".github/scripts"]
+src = ["src", "tests", ".github/scripts", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -64,13 +65,13 @@ select = [
 ignore = ["E501"]  # the formatter owns line length
 
 [tool.ruff.lint.isort]
-known-first-party = ["wikiflow", "story_lint", "layout_lint"]
+known-first-party = ["wikiflow", "story_lint", "layout_lint", "benchmark_extraction"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "scripts", ".github/scripts", "tests"]
-mypy_path = ".github/scripts"
+mypy_path = ".github/scripts,scripts"
 strict = true
 warn_unreachable = true
 

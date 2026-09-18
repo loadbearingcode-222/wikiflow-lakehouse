@@ -140,3 +140,5 @@ Operations (alerts, failures, reprocess, backfill, releases): `docs/RUNBOOK.md`.
    variable inside an inlined file is not a node. Reference a resource instead:
    `${resources.schemas.gold.catalog_name}`. Read a space back with
    `databricks api get "/api/2.0/genie/spaces/<id>?include_serialized_space=true"`.
+19. **A serverless `spark_python_task` runs its file under IPython, so `sys.exit(0)` FAILS it**
+   (`SystemExit: 0`, then an auto-retry; M5-S2). Exit only with a failure code.
