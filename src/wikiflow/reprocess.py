@@ -10,9 +10,11 @@ landed files (this module) where `--source wikimedia` downloads them. Extraction
 audit row, the projectviews reconciliation, `verify_run` and the pipeline refresh are all the
 same code. A rebuilt hour is recorded like any other attempt, told apart by its task key.
 
-Landed files are re-verified, not trusted. Scanning the gzip to the end re-checks its CRC and
-yields the true line count the malformed-line gate needs, and the sha256 lets `verify_run`
-confirm the rebuild reproduced every earlier attempt of the same file.
+Landed files are re-verified, not trusted, and re-verification alone is not enough. A drill
+(M5-S1) replaced a landed file with a VALID gzip holding 30% of its lines: every gzip check
+passed, and only the reconciliation caught it, after bronze had been written. So a rebuild also
+checks the file's sha256 against the one the audit recorded when the hour was ingested. Raw files
+are immutable at the source, so a different checksum means the local copy changed, not the hour.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import hashlib
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from wikiflow.download import DATASETS, DownloadResult, LandedFile, _scan_content
 from wikiflow.retention import find_partitions
@@ -31,6 +34,10 @@ _CHUNK = 1024 * 1024
 
 class RawFileMissingError(FileNotFoundError):
     """An hour's raw file is not in the volume: never landed, or past retention."""
+
+
+class RawFileChangedError(RuntimeError):
+    """The landed file is not the one that was verified when the hour was ingested."""
 
 
 def hours(start: datetime, end: datetime) -> Iterator[datetime]:
@@ -88,3 +95,28 @@ def verify_landed(dump: HourlyDump, raw_root: Path) -> dict[str, LandedFile]:
         )
         landed[dataset] = LandedFile(dataset, path, result)
     return landed
+
+
+def check_same_file(recorded: str | None, found: str, *, hour: str) -> None:
+    """Refuse a rebuild from a raw file whose checksum is not the one the audit recorded.
+
+    `recorded` is None when no successful ingest of the hour is on record (an hour landed by hand,
+    or one whose audit rows aged out), and then there is nothing to compare against.
+    """
+    if recorded is not None and recorded != found:
+        raise RawFileChangedError(
+            f"the raw file for {hour} has changed since it was landed: sha256 {found[:12]} now, "
+            f"{recorded[:12]} when it was ingested. Re-ingest the hour from Wikimedia instead of "
+            "rebuilding from a file that is not the one that was verified."
+        )
+
+
+def recorded_sha256(spark: Any, catalog: str, dump: HourlyDump) -> str | None:
+    """The sha256 the newest successful INGEST of this hour recorded (not a rebuild)."""
+    rows = spark.sql(
+        f"SELECT sha256 FROM {catalog}.ops.ingest_audit "
+        f"WHERE interval_start_utc = TIMESTAMP_NTZ'{dump.interval_start:%Y-%m-%d %H:00:00}' "
+        "AND task_key = 'ingest_hour' AND status = 'success' AND sha256 IS NOT NULL "
+        "ORDER BY finished_at DESC LIMIT 1"
+    ).collect()
+    return str(rows[0]["sha256"]) if rows else None

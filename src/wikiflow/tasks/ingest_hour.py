@@ -61,6 +61,11 @@ def ingest(
     try:
         if source == "raw":
             landed = reprocess.verify_landed(dump, raw_root)
+            reprocess.check_same_file(
+                reprocess.recorded_sha256(spark, catalog, dump),
+                landed["pageviews"].download.sha256,
+                hour=f"{dump.interval_start:%Y-%m-%dT%H}",
+            )
         else:
             landed = download.land_hour(dump, raw_root)
         pageviews = landed["pageviews"].download

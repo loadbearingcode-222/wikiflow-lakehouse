@@ -106,3 +106,13 @@ def test_both_tasks_default_to_wikimedia_and_accept_raw() -> None:
         ingest_hour.parse_args(["--catalog", "c", "--hour", "2026-09-14T11"]).source == "wikimedia"
     )
     assert plan_hours_task.parse_args(["--catalog", "c", "--source", "raw"]).source == "raw"
+
+
+def test_a_rebuild_is_refused_when_the_landed_file_is_not_the_one_that_was_ingested() -> None:
+    """M5-S1's drill: a valid gzip holding 30% of the lines passed every gzip check."""
+    from wikiflow.reprocess import RawFileChangedError, check_same_file
+
+    check_same_file("ab" * 32, "ab" * 32, hour="2026-09-15T11")
+    check_same_file(None, "ab" * 32, hour="2026-09-15T11")  # no ingest on record to compare with
+    with pytest.raises(RawFileChangedError, match="has changed since it was landed"):
+        check_same_file("ab" * 32, "cd" * 32, hour="2026-09-15T11")
